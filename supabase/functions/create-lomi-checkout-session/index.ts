@@ -38,6 +38,7 @@ interface RequestPayload {
   successUrlPath?: string;
   cancelUrlPath?: string;
   allowedProviders?: string[];
+  priceId?: string;
   productId?: string;
   allowCouponCode?: boolean; // Allow coupon codes
   allowQuantity?: boolean; // Allow quantity changes
@@ -223,10 +224,11 @@ serve(async (req: Request) => {
     const successRedirectPath = payload.successUrlPath || "/payment/success";
     const cancelRedirectPath = payload.cancelUrlPath || "/payment/cancel";
 
-    // Determine if we're using product-based or event-based checkout
-    const isProductBased = !!payload.productId;
-    console.log("Is product-based checkout:", isProductBased);
-    console.log("Product ID being used:", payload.productId);
+  // Determine if we're using price-based (product/price) or event-based checkout
+  const priceId = payload.priceId || payload.productId || null;
+  const isPriceBased = !!priceId;
+  console.log("Is price-based checkout:", isPriceBased);
+  console.log("Price ID being used:", priceId);
 
     const baseLomiPayload = {
       success_url: `${APP_BASE_URL}${successRedirectPath}?purchase_id=${purchaseId}&status=success`,
@@ -246,15 +248,15 @@ serve(async (req: Request) => {
         ticket_type_id: payload.ticketTypeId,
         customer_id: customerId,
         app_source: "djaouli_events_app",
-        is_product_based: isProductBased,
+        is_product_based: isPriceBased,
       },
       require_billing_address: false,
     };
 
-    const lomiPayload = isProductBased
+  const lomiPayload = isPriceBased
       ? {
           ...baseLomiPayload,
-          product_id: payload.productId,
+        price_id: priceId,
           title: `${payload.eventTitle} Tickets (x${payload.quantity})`,
           description: `Tickets for: ${payload.eventTitle}`,
         }
@@ -268,7 +270,7 @@ serve(async (req: Request) => {
 
     console.log(
       "Using",
-      isProductBased ? "product-based" : "event-based",
+    isPriceBased ? "price-based" : "event-based",
       "checkout",
     );
 
