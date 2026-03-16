@@ -347,137 +347,135 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                     {hasDefinedTickets && (
                       <div className="space-y-3">
                         {event.ticketTypes?.map((ticket) => (
-                            <Card
-                              key={ticket._key}
-                              className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
-                            >
-                              {/* Mimicking djaouli-code.tsx structure - outer div with pattern (simplified here) & inner with gradient (simplified here) */}
-                              <div className="size-full bg-repeat p-1 bg-size-[20px_20px]">
-                                <div className="size-full bg-linear-to-br from-background/95 via-background/85 to-background/70 rounded-sm pt-1 pb-1 px-3 flex flex-col grow">
-                                  <CardContent className="p-0 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 grow w-full">
-                                    <div className="grow">
-                                      <div className="flex flex-wrap items-baseline mb-3">
-                                        <h4 className="text-gray-100 font-bold text-lg uppercase leading-tight">
-                                          {ticket.name.replace(
-                                            /\s*\(\d+(\s*\w+)?\)$/,
-                                            "",
-                                          )}
-                                        </h4>
-                                        <span className="mx-2 text-gray-400 text-lg">
-                                          |
-                                        </span>
-                                        <p className="text-primary font-semibold text-xl whitespace-nowrap">
-                                          {formatPrice(ticket.price)}
-                                          {t(
-                                            currentLanguage,
-                                            "eventSlugPage.tickets.currencySuffix",
-                                          )}
-                                        </p>
-                                      </div>
-                                      {ticket.description && (
-                                        <div className="text-sm mb-1 space-y-1">
-                                          {ticket.description
-                                            .split("\n")
-                                            .map((line, index) => {
-                                              const trimmedLine = line.trim();
-                                              if (trimmedLine === "") {
-                                                return <br key={index} />;
-                                              }
-                                              if (
-                                                trimmedLine.startsWith("⚠️")
-                                              ) {
-                                                return (
-                                                  <p
-                                                    key={index}
-                                                    className="text-amber-400 font-medium"
-                                                  >
-                                                    {trimmedLine}
-                                                  </p>
-                                                );
-                                              }
+                          <Card
+                            key={ticket._key}
+                            className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
+                          >
+                            {/* Mimicking djaouli-code.tsx structure - outer div with pattern (simplified here) & inner with gradient (simplified here) */}
+                            <div className="size-full bg-repeat p-1 bg-size-[20px_20px]">
+                              <div className="size-full bg-linear-to-br from-background/95 via-background/85 to-background/70 rounded-sm pt-1 pb-1 px-3 flex flex-col grow">
+                                <CardContent className="p-0 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 grow w-full">
+                                  <div className="grow">
+                                    <div className="flex flex-wrap items-baseline mb-3">
+                                      <h4 className="text-gray-100 font-bold text-lg uppercase leading-tight">
+                                        {ticket.name.replace(
+                                          /\s*\(\d+(\s*\w+)?\)$/,
+                                          "",
+                                        )}
+                                      </h4>
+                                      <span className="mx-2 text-gray-400 text-lg">
+                                        |
+                                      </span>
+                                      <p className="text-primary font-semibold text-xl whitespace-nowrap">
+                                        {formatPrice(ticket.price)}
+                                        {t(
+                                          currentLanguage,
+                                          "eventSlugPage.tickets.currencySuffix",
+                                        )}
+                                      </p>
+                                    </div>
+                                    {ticket.description && (
+                                      <div className="text-sm mb-1 space-y-1">
+                                        {ticket.description
+                                          .split("\n")
+                                          .map((line, index) => {
+                                            const trimmedLine = line.trim();
+                                            if (trimmedLine === "") {
+                                              return <br key={index} />;
+                                            }
+                                            if (trimmedLine.startsWith("⚠️")) {
                                               return (
                                                 <p
                                                   key={index}
-                                                  className="text-gray-400 leading-relaxed"
+                                                  className="text-amber-400 font-medium"
                                                 >
                                                   {trimmedLine}
                                                 </p>
                                               );
-                                            })}
-                                        </div>
-                                      )}
-                                      {ticket.details && (
-                                        <div className="text-xs text-gray-400/80 my-2 space-y-1">
-                                          {ticket.details
-                                            .split("\n")
-                                            .map((line, idx) => {
-                                              const trimmedLine = line.trim();
-                                              if (trimmedLine === "") {
-                                                return <br key={idx} />;
-                                              }
-                                              const match =
-                                                trimmedLine.match(
-                                                  /^(✅|✔|•|-|\*)\s*(.*)/,
-                                                );
-                                              if (match && match[2]) {
-                                                return (
-                                                  <div
-                                                    key={idx}
-                                                    className="flex items-start pl-5"
-                                                  >
-                                                    <Check className="mr-1.5 h-3.5 w-3.5 text-green-500 shrink-0 mt-px" />
-                                                    <span className="leading-snug">
-                                                      {match[2]}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              }
+                                            }
+                                            return (
+                                              <p
+                                                key={index}
+                                                className="text-gray-400 leading-relaxed"
+                                              >
+                                                {trimmedLine}
+                                              </p>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                    {ticket.details && (
+                                      <div className="text-xs text-gray-400/80 my-2 space-y-1">
+                                        {ticket.details
+                                          .split("\n")
+                                          .map((line, idx) => {
+                                            const trimmedLine = line.trim();
+                                            if (trimmedLine === "") {
+                                              return <br key={idx} />;
+                                            }
+                                            const match =
+                                              trimmedLine.match(
+                                                /^(✅|✔|•|-|\*)\s*(.*)/,
+                                              );
+                                            if (match && match[2]) {
                                               return (
-                                                <p
+                                                <div
                                                   key={idx}
-                                                  className="leading-snug ml-5"
+                                                  className="flex items-start pl-5"
                                                 >
-                                                  {" "}
-                                                  {/* Indent non-list items slightly if preferred or remove ml for full width */}
-                                                  {trimmedLine}
-                                                </p>
+                                                  <Check className="mr-1.5 h-3.5 w-3.5 text-green-500 shrink-0 mt-px" />
+                                                  <span className="leading-snug">
+                                                    {match[2]}
+                                                  </span>
+                                                </div>
                                               );
-                                            })}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="shrink-0 w-full sm:w-auto mt-3 sm:mt-0 flex justify-end">
-                                      <CheckoutButton
-                                        item={{
-                                          id: ticket._key,
-                                          name: ticket.name,
-                                          price: ticket.price,
-                                          isBundle: false,
-                                          maxPerOrder: ticket.maxPerOrder,
-                                          stock: ticket.stock,
-                                          paymentLink: ticket.paymentLink,
-                                          active: ticket.active,
-                                          salesStart: ticket.salesStart,
-                                          salesEnd: ticket.salesEnd,
-                                          productId: ticket.productId,
-                                        }}
-                                        eventDetails={{
-                                          id: event._id,
-                                          title: event.title,
-                                          dateText: formattedDate,
-                                          timeText: formattedTime,
-                                          venueName: event.location?.venueName,
-                                        }}
-                                        globallyTicketsOnSale={
-                                          globallyTicketsOnSale
-                                        }
-                                        currentLanguage={currentLanguage}
-                                      />
-                                    </div>
-                                  </CardContent>
-                                </div>
+                                            }
+                                            return (
+                                              <p
+                                                key={idx}
+                                                className="leading-snug ml-5"
+                                              >
+                                                {" "}
+                                                {/* Indent non-list items slightly if preferred or remove ml for full width */}
+                                                {trimmedLine}
+                                              </p>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="shrink-0 w-full sm:w-auto mt-3 sm:mt-0 flex justify-end">
+                                    <CheckoutButton
+                                      item={{
+                                        id: ticket._key,
+                                        name: ticket.name,
+                                        price: ticket.price,
+                                        isBundle: false,
+                                        maxPerOrder: ticket.maxPerOrder,
+                                        stock: ticket.stock,
+                                        paymentLink: ticket.paymentLink,
+                                        active: ticket.active,
+                                        salesStart: ticket.salesStart,
+                                        salesEnd: ticket.salesEnd,
+                                        productId: ticket.productId,
+                                      }}
+                                      eventDetails={{
+                                        id: event._id,
+                                        title: event.title,
+                                        dateText: formattedDate,
+                                        timeText: formattedTime,
+                                        venueName: event.location?.venueName,
+                                      }}
+                                      globallyTicketsOnSale={
+                                        globallyTicketsOnSale
+                                      }
+                                      currentLanguage={currentLanguage}
+                                    />
+                                  </div>
+                                </CardContent>
                               </div>
-                            </Card>
+                            </div>
+                          </Card>
                         ))}
                       </div>
                     )}
@@ -489,138 +487,135 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                           {t(currentLanguage, "eventSlugPage.bundles.title")}
                         </h3>
                         {event.bundles?.map((bundle) => (
-                            <Card
-                              key={bundle.bundleId.current}
-                              className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
-                            >
-                              <div className="size-full bg-repeat p-1 bg-size-[20px_20px]">
-                                <div className="size-full bg-linear-to-br from-background/95 via-background/85 to-background/70 rounded-sm pt-1 pb-1 px-3 flex flex-col grow">
-                                  <CardContent className="p-0 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 grow w-full">
-                                    <div className="grow">
-                                      <div className="flex flex-wrap items-baseline mb-3">
-                                        <h4 className="text-gray-100 font-bold text-lg uppercase leading-tight">
-                                          {bundle.name.replace(
-                                            /\s*\(\d+(\s*\w+)?\)$/,
-                                            "",
-                                          )}
-                                        </h4>
-                                        <span className="mx-2 text-gray-400 text-lg">
-                                          |
-                                        </span>
-                                        <p className="text-primary font-semibold text-xl whitespace-nowrap">
-                                          {formatPrice(bundle.price)}
-                                          {t(
-                                            currentLanguage,
-                                            "eventSlugPage.tickets.currencySuffix",
-                                          )}
-                                        </p>
-                                      </div>
-                                      {bundle.description && (
-                                        <div className="text-sm mb-1 space-y-1">
-                                          {bundle.description
-                                            .split("\n")
-                                            .map((line, index) => {
-                                              const trimmedLine = line.trim();
-                                              if (trimmedLine === "") {
-                                                return <br key={index} />;
-                                              }
-                                              if (
-                                                trimmedLine.startsWith("⚠️")
-                                              ) {
-                                                return (
-                                                  <p
-                                                    key={index}
-                                                    className="text-amber-400 font-medium"
-                                                  >
-                                                    {trimmedLine}
-                                                  </p>
-                                                );
-                                              }
+                          <Card
+                            key={bundle.bundleId.current}
+                            className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
+                          >
+                            <div className="size-full bg-repeat p-1 bg-size-[20px_20px]">
+                              <div className="size-full bg-linear-to-br from-background/95 via-background/85 to-background/70 rounded-sm pt-1 pb-1 px-3 flex flex-col grow">
+                                <CardContent className="p-0 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 grow w-full">
+                                  <div className="grow">
+                                    <div className="flex flex-wrap items-baseline mb-3">
+                                      <h4 className="text-gray-100 font-bold text-lg uppercase leading-tight">
+                                        {bundle.name.replace(
+                                          /\s*\(\d+(\s*\w+)?\)$/,
+                                          "",
+                                        )}
+                                      </h4>
+                                      <span className="mx-2 text-gray-400 text-lg">
+                                        |
+                                      </span>
+                                      <p className="text-primary font-semibold text-xl whitespace-nowrap">
+                                        {formatPrice(bundle.price)}
+                                        {t(
+                                          currentLanguage,
+                                          "eventSlugPage.tickets.currencySuffix",
+                                        )}
+                                      </p>
+                                    </div>
+                                    {bundle.description && (
+                                      <div className="text-sm mb-1 space-y-1">
+                                        {bundle.description
+                                          .split("\n")
+                                          .map((line, index) => {
+                                            const trimmedLine = line.trim();
+                                            if (trimmedLine === "") {
+                                              return <br key={index} />;
+                                            }
+                                            if (trimmedLine.startsWith("⚠️")) {
                                               return (
                                                 <p
                                                   key={index}
-                                                  className="text-gray-400 leading-relaxed"
+                                                  className="text-amber-400 font-medium"
                                                 >
                                                   {trimmedLine}
                                                 </p>
                                               );
-                                            })}
-                                        </div>
-                                      )}
-                                      {bundle.details && (
-                                        <div className="text-xs text-gray-400/80 my-2 space-y-1">
-                                          {bundle.details
-                                            .split("\n")
-                                            .map((line, idx) => {
-                                              const trimmedLine = line.trim();
-                                              if (trimmedLine === "") {
-                                                return <br key={idx} />;
-                                              }
-                                              const match =
-                                                trimmedLine.match(
-                                                  /^(✅|✔|•|-|\*)\s*(.*)/,
-                                                );
-                                              if (match && match[2]) {
-                                                return (
-                                                  <div
-                                                    key={idx}
-                                                    className="flex items-start pl-5"
-                                                  >
-                                                    <Check className="mr-1.5 h-3.5 w-3.5 text-green-500 shrink-0 mt-px" />
-                                                    <span className="leading-snug">
-                                                      {match[2]}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              }
+                                            }
+                                            return (
+                                              <p
+                                                key={index}
+                                                className="text-gray-400 leading-relaxed"
+                                              >
+                                                {trimmedLine}
+                                              </p>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                    {bundle.details && (
+                                      <div className="text-xs text-gray-400/80 my-2 space-y-1">
+                                        {bundle.details
+                                          .split("\n")
+                                          .map((line, idx) => {
+                                            const trimmedLine = line.trim();
+                                            if (trimmedLine === "") {
+                                              return <br key={idx} />;
+                                            }
+                                            const match =
+                                              trimmedLine.match(
+                                                /^(✅|✔|•|-|\*)\s*(.*)/,
+                                              );
+                                            if (match && match[2]) {
                                               return (
-                                                <p
+                                                <div
                                                   key={idx}
-                                                  className="leading-snug ml-5"
+                                                  className="flex items-start pl-5"
                                                 >
-                                                  {" "}
-                                                  {/* Indent non-list items slightly */}
-                                                  {trimmedLine}
-                                                </p>
+                                                  <Check className="mr-1.5 h-3.5 w-3.5 text-green-500 shrink-0 mt-px" />
+                                                  <span className="leading-snug">
+                                                    {match[2]}
+                                                  </span>
+                                                </div>
                                               );
-                                            })}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="shrink-0 w-full sm:w-auto mt-3 sm:mt-0 flex justify-end">
-                                      <CheckoutButton
-                                        item={{
-                                          id: bundle.bundleId.current, // Use bundleId.current for bundles
-                                          name: bundle.name,
-                                          price: bundle.price,
-                                          isBundle: true,
-                                          maxPerOrder: bundle.maxPerOrder,
-                                          stock: bundle.stock,
-                                          paymentLink: bundle.paymentLink,
-                                          active: bundle.active,
-                                          salesStart: bundle.salesStart,
-                                          salesEnd: bundle.salesEnd,
-                                          productId: bundle.productId,
-                                          ticketsIncluded:
-                                            bundle.ticketsIncluded,
-                                        }}
-                                        eventDetails={{
-                                          id: event._id,
-                                          title: event.title,
-                                          dateText: formattedDate,
-                                          timeText: formattedTime,
-                                          venueName: event.location?.venueName,
-                                        }}
-                                        globallyTicketsOnSale={
-                                          globallyTicketsOnSale
-                                        }
-                                        currentLanguage={currentLanguage}
-                                      />
-                                    </div>
-                                  </CardContent>
-                                </div>
+                                            }
+                                            return (
+                                              <p
+                                                key={idx}
+                                                className="leading-snug ml-5"
+                                              >
+                                                {" "}
+                                                {/* Indent non-list items slightly */}
+                                                {trimmedLine}
+                                              </p>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="shrink-0 w-full sm:w-auto mt-3 sm:mt-0 flex justify-end">
+                                    <CheckoutButton
+                                      item={{
+                                        id: bundle.bundleId.current, // Use bundleId.current for bundles
+                                        name: bundle.name,
+                                        price: bundle.price,
+                                        isBundle: true,
+                                        maxPerOrder: bundle.maxPerOrder,
+                                        stock: bundle.stock,
+                                        paymentLink: bundle.paymentLink,
+                                        active: bundle.active,
+                                        salesStart: bundle.salesStart,
+                                        salesEnd: bundle.salesEnd,
+                                        productId: bundle.productId,
+                                        ticketsIncluded: bundle.ticketsIncluded,
+                                      }}
+                                      eventDetails={{
+                                        id: event._id,
+                                        title: event.title,
+                                        dateText: formattedDate,
+                                        timeText: formattedTime,
+                                        venueName: event.location?.venueName,
+                                      }}
+                                      globallyTicketsOnSale={
+                                        globallyTicketsOnSale
+                                      }
+                                      currentLanguage={currentLanguage}
+                                    />
+                                  </div>
+                                </CardContent>
                               </div>
-                            </Card>
+                            </div>
+                          </Card>
                         ))}
                       </div>
                     )}

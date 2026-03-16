@@ -224,11 +224,11 @@ serve(async (req: Request) => {
     const successRedirectPath = payload.successUrlPath || "/payment/success";
     const cancelRedirectPath = payload.cancelUrlPath || "/payment/cancel";
 
-  // Determine if we're using price-based (product/price) or event-based checkout
-  const priceId = payload.priceId || payload.productId || null;
-  const isPriceBased = !!priceId;
-  console.log("Is price-based checkout:", isPriceBased);
-  console.log("Price ID being used:", priceId);
+    // Determine if we're using price-based (product/price) or event-based checkout
+    const priceId = payload.priceId || payload.productId || null;
+    const isPriceBased = !!priceId;
+    console.log("Is price-based checkout:", isPriceBased);
+    console.log("Price ID being used:", priceId);
 
     const baseLomiPayload = {
       success_url: `${APP_BASE_URL}${successRedirectPath}?purchase_id=${purchaseId}&status=success`,
@@ -253,10 +253,10 @@ serve(async (req: Request) => {
       require_billing_address: false,
     };
 
-  const lomiPayload = isPriceBased
+    const lomiPayload = isPriceBased
       ? {
           ...baseLomiPayload,
-        price_id: priceId,
+          price_id: priceId,
           title: `${payload.eventTitle} Tickets (x${payload.quantity})`,
           description: `Tickets for: ${payload.eventTitle}`,
         }
@@ -270,7 +270,7 @@ serve(async (req: Request) => {
 
     console.log(
       "Using",
-    isPriceBased ? "price-based" : "event-based",
+      isPriceBased ? "price-based" : "event-based",
       "checkout",
     );
 

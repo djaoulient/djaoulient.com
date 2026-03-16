@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { PortableText } from "@portabletext/react";
 import { Button } from "@/components/ui/button";
 import { PlusIcon, MinusIcon } from "lucide-react";
 import { motion } from "framer-motion";
@@ -367,7 +368,7 @@ function ProductDetail({ product }: ProductDetailContentProps) {
 
             {product.description && (
               <motion.div
-                className="bg-card/30 backdrop-blur-sm rounded-sm p-6 border border-border/20"
+                className="bg-card/30 backdrop-blur-sm rounded-sm p-6 border border-border/20 min-h-[260px]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5, delay: 0.5 }}
@@ -395,15 +396,14 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                     </div>
                   )}
                 </div>
-                <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
-                  <p>
-                    {typeof product.description === "string"
-                      ? product.description
-                      : Array.isArray(product.description) &&
-                          product.description[0]?.children?.[0]?.text
-                        ? product.description[0].children[0].text
-                        : "No description available"}
-                  </p>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-line">
+                  {typeof product.description === "string" ? (
+                    <p>{product.description}</p>
+                  ) : Array.isArray(product.description) ? (
+                    <PortableText value={product.description} />
+                  ) : (
+                    <p>No description available</p>
+                  )}
                 </div>
               </motion.div>
             )}

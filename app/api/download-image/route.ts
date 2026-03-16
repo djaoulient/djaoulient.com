@@ -38,4 +38,3 @@ export async function GET(req: NextRequest) {
     return new Response("Error downloading image", { status: 500 });
   }
 }
-

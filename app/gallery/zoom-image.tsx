@@ -103,4 +103,3 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
     </div>
   );
 }
-

@@ -19,8 +19,8 @@ interface FloatingPromoProps {
 
 export default function FloatingPromo({
   imageUrl = "/placeholder.webp",
-  onClose = () => { },
-  onButtonClick = () => { },
+  onClose = () => {},
+  onButtonClick = () => {},
   href,
   title = "Promotional event flyer",
   buttonText = "Get your ticket",
