@@ -3,12 +3,13 @@ import crypto from "crypto";
 import { Buffer } from "node:buffer";
 
 // --- Helper: Check if webhook has already been processed ---
-async function isWebhookAlreadyProcessed(supabase, webhookEventId) {
+async function isWebhookAlreadyProcessed(supabase, webhookEventId, purchaseId) {
   try {
     const { data, error } = await supabase.rpc(
       "check_webhook_already_processed",
       {
         p_webhook_event_id: webhookEventId,
+        p_purchase_id: purchaseId ?? null,
       },
     );
 
@@ -231,6 +232,7 @@ export async function POST(request) {
     const webhookProcessed = await isWebhookAlreadyProcessed(
       supabase,
       webhookEventId,
+      purchaseId,
     );
     if (webhookProcessed) {
       console.warn(
@@ -293,7 +295,29 @@ export async function POST(request) {
         "Events Webhook Error: Failed to call record_event_lomi_payment RPC:",
         rpcError,
       );
-      // Potentially retry or alert, but respond to Lomi to avoid Lomi retries for DB issues.
+      // Idempotency: if purchase is already paid, treat as success to stop retries
+      if (paymentStatusForDb === "paid") {
+        const { data: purchaseStatus } = await supabase.rpc(
+          "get_purchase_status",
+          { p_purchase_id: purchaseId },
+        );
+        if (purchaseStatus === "paid") {
+          console.warn(
+            `Events Webhook: Purchase ${purchaseId} already paid, treating RPC error as idempotent success`,
+          );
+          await markWebhookAsProcessed(supabase, webhookEventId, purchaseId);
+          return new Response(
+            JSON.stringify({
+              received: true,
+              message: "Webhook already processed (purchase already paid).",
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+      }
       return new Response(
         JSON.stringify({ error: "Failed to process payment update in DB." }),
         {

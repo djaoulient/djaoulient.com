@@ -56,3 +56,25 @@ IS 'Records the outcome of a Lomi payment for an event purchase, updating status
 
 -- Grant execute permission to the service_role (used by Supabase functions/backend calls)
 GRANT EXECUTE ON FUNCTION public.record_event_lomi_payment(UUID, TEXT, TEXT, TEXT, JSONB, NUMERIC, TEXT) TO service_role;
+
+-- RPC to get purchase status (for webhook idempotency, no direct table access from API)
+CREATE OR REPLACE FUNCTION public.get_purchase_status(p_purchase_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_status TEXT;
+BEGIN
+    SELECT status INTO v_status
+    FROM public.purchases
+    WHERE id = p_purchase_id;
+    RETURN v_status;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_purchase_status(UUID)
+IS 'Returns the status of a purchase by id. Used by webhook handler for idempotency.';
+
+GRANT EXECUTE ON FUNCTION public.get_purchase_status(UUID) TO service_role;
