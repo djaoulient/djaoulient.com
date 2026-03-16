@@ -74,7 +74,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: ticketData, error: verifyError } = await supabase.rpc(
       "verify_ticket",
-      { p_ticket_identifier: trimmedId },
+      { 
+        p_ticket_identifier: trimmedId,
+        p_scanner_email: verified_by || "edge_function_unknown"
+      },
     );
 
     if (verifyError) {

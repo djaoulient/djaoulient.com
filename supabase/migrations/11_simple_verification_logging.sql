@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS public.verification_attempts (
     success BOOLEAN NOT NULL,
     error_code TEXT,
     error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    scanner_email TEXT
 );
 
 -- Add indexes for common queries
@@ -55,7 +56,8 @@ CREATE OR REPLACE FUNCTION public.log_verification_attempt(
     p_event_title TEXT,
     p_success BOOLEAN,
     p_error_code TEXT DEFAULT NULL,
-    p_error_message TEXT DEFAULT NULL
+    p_error_message TEXT DEFAULT NULL,
+    p_scanner_email TEXT DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -71,14 +73,16 @@ BEGIN
         event_title,
         success,
         error_code,
-        error_message
+        error_message,
+        scanner_email
     ) VALUES (
         p_ticket_identifier,
         p_event_id,
         p_event_title,
         p_success,
         p_error_code,
-        p_error_message
+        p_error_message,
+        p_scanner_email
     ) RETURNING id INTO log_id;
     
     RETURN log_id;

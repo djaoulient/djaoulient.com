@@ -29,7 +29,8 @@ RETURNS TABLE(
     pdf_ticket_sent_at TIMESTAMPTZ,
     used_at TIMESTAMPTZ,
     is_used BOOLEAN,
-    verified_by TEXT
+    verified_by TEXT,
+    scanned_count BIGINT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -63,7 +64,15 @@ BEGIN
         p.pdf_ticket_sent_at,
         p.used_at,
         p.is_used,
-        p.verified_by
+        p.verified_by,
+        (
+            CASE 
+                WHEN p.individual_tickets_generated THEN 
+                    (SELECT COUNT(*) FROM public.individual_tickets WHERE purchase_id = p.id AND is_used = TRUE)
+                ELSE 
+                    p.use_count::BIGINT
+            END
+        ) as scanned_count
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     ORDER BY p.created_at DESC
@@ -101,7 +110,8 @@ RETURNS TABLE(
     pdf_ticket_sent_at TIMESTAMPTZ,
     used_at TIMESTAMPTZ,
     is_used BOOLEAN,
-    verified_by TEXT
+    verified_by TEXT,
+    scanned_count BIGINT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -135,7 +145,15 @@ BEGIN
         p.pdf_ticket_sent_at,
         p.used_at,
         p.is_used,
-        p.verified_by
+        p.verified_by,
+        (
+            CASE 
+                WHEN p.individual_tickets_generated THEN 
+                    (SELECT COUNT(*) FROM public.individual_tickets WHERE purchase_id = p.id AND is_used = TRUE)
+                ELSE 
+                    p.use_count::BIGINT
+            END
+        ) as scanned_count
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     WHERE 

@@ -112,10 +112,10 @@ DROP FUNCTION IF EXISTS public.mark_ticket_used(TEXT, TEXT);
 
 -- 4. Unified Ticket Verification Function (Enhanced with error handling)
 CREATE OR REPLACE FUNCTION public.verify_ticket(
-    p_ticket_identifier TEXT
+    p_ticket_identifier TEXT,
+    p_scanner_email TEXT DEFAULT NULL
 )
 RETURNS TABLE(
-    -- Return columns (same as before, but with quantity always being 1 for individual tickets)
     purchase_id UUID,
     customer_name TEXT,
     customer_email TEXT,
@@ -136,7 +136,7 @@ RETURNS TABLE(
     used_at TIMESTAMPTZ,
     verified_by TEXT,
     use_count INTEGER,
-    total_quantity INTEGER -- The original total quantity of the purchase
+    total_quantity INTEGER 
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -149,16 +149,13 @@ DECLARE
     log_event_id TEXT;
     log_event_title TEXT;
 BEGIN
-    -- Validate input
     IF p_ticket_identifier IS NULL OR TRIM(p_ticket_identifier) = '' THEN
         RAISE EXCEPTION 'INVALID_TICKET_ID: Ticket identifier cannot be empty';
     END IF;
 
-    -- Try to find it in the new individual_tickets table first
     SELECT it.* INTO individual_ticket FROM public.individual_tickets it WHERE it.ticket_identifier = p_ticket_identifier;
 
     IF FOUND THEN
-        -- It's a new, individual ticket
         SELECT p.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone 
         INTO purchase_record 
         FROM public.purchases p
@@ -166,67 +163,33 @@ BEGIN
         WHERE p.id = individual_ticket.purchase_id;
         
         IF NOT FOUND THEN
-            -- Log the error
             PERFORM public.log_verification_attempt(
-                p_ticket_identifier,
-                NULL,
-                NULL,
-                FALSE,
-                'ORPHANED_TICKET',
-                'Individual ticket found but associated purchase not found'
+                p_ticket_identifier, NULL, NULL, FALSE, 'ORPHANED_TICKET', 'Individual ticket found but associated purchase not found', p_scanner_email
             );
             RAISE EXCEPTION 'ORPHANED_TICKET: Ticket found but purchase record missing';
         END IF;
 
-        -- Check if ticket is for a paid purchase
         IF purchase_record.status != 'paid' THEN
             PERFORM public.log_verification_attempt(
-                p_ticket_identifier,
-                purchase_record.event_id,
-                purchase_record.event_title,
-                FALSE,
-                'UNPAID_TICKET',
-                'Ticket belongs to unpaid purchase'
+                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'UNPAID_TICKET', 'Ticket belongs to unpaid purchase', p_scanner_email
             );
             RAISE EXCEPTION 'UNPAID_TICKET: This ticket has not been paid for';
         END IF;
 
-        -- Log successful verification
         PERFORM public.log_verification_attempt(
-            p_ticket_identifier,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            TRUE,
-            NULL,
-            NULL
+            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, NULL, p_scanner_email
         );
         
         RETURN QUERY SELECT
-            purchase_record.id,
-            purchase_record.customer_name,
-            purchase_record.customer_email,
-            purchase_record.customer_phone,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            purchase_record.event_date_text,
-            purchase_record.event_time_text,
-            purchase_record.event_venue_name,
-            purchase_record.ticket_type_id,
-            purchase_record.ticket_name,
-            1, -- Quantity is always 1 for an individual ticket
-            purchase_record.price_per_ticket,
-            purchase_record.total_amount,
-            purchase_record.currency_code,
-            individual_ticket.status,
-            individual_ticket.is_used,
-            individual_ticket.used_at,
-            individual_ticket.verified_by,
-            NULL::INTEGER, -- use_count is not applicable
-            purchase_record.quantity; -- total_quantity from original purchase
+            purchase_record.id, purchase_record.customer_name, purchase_record.customer_email, purchase_record.customer_phone,
+            purchase_record.event_id, purchase_record.event_title, purchase_record.event_date_text, purchase_record.event_time_text,
+            purchase_record.event_venue_name, purchase_record.ticket_type_id, purchase_record.ticket_name,
+            1, purchase_record.price_per_ticket, purchase_record.total_amount, purchase_record.currency_code,
+            individual_ticket.status, individual_ticket.is_used, individual_ticket.used_at, individual_ticket.verified_by,
+            NULL::INTEGER, purchase_record.quantity;
         RETURN;
     END IF;
 
-    -- If not found, check the legacy purchases table
     SELECT p.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone
     INTO purchase_record 
     FROM public.purchases p
@@ -234,65 +197,30 @@ BEGIN
     WHERE p.unique_ticket_identifier = p_ticket_identifier;
     
     IF FOUND THEN
-        -- Check if ticket is for a paid purchase
         IF purchase_record.status != 'paid' THEN
             PERFORM public.log_verification_attempt(
-                p_ticket_identifier,
-                purchase_record.event_id,
-                purchase_record.event_title,
-                FALSE,
-                'UNPAID_TICKET',
-                'Ticket belongs to unpaid purchase'
+                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'UNPAID_TICKET', 'Ticket belongs to unpaid purchase', p_scanner_email
             );
             RAISE EXCEPTION 'UNPAID_TICKET: This ticket has not been paid for';
         END IF;
 
-        -- Log successful verification
         PERFORM public.log_verification_attempt(
-            p_ticket_identifier,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            TRUE,
-            NULL,
-            NULL
+            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, NULL, p_scanner_email
         );
 
-        -- It's a legacy ticket
         RETURN QUERY SELECT
-            purchase_record.id,
-            purchase_record.customer_name,
-            purchase_record.customer_email,
-            purchase_record.customer_phone,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            purchase_record.event_date_text,
-            purchase_record.event_time_text,
-            purchase_record.event_venue_name,
-            purchase_record.ticket_type_id,
-            purchase_record.ticket_name,
-            purchase_record.quantity, -- The full original quantity
-            purchase_record.price_per_ticket,
-            purchase_record.total_amount,
-            purchase_record.currency_code,
-            purchase_record.status,
-            (purchase_record.use_count >= purchase_record.quantity), -- is_used is true if fully used
-            purchase_record.used_at,
-            purchase_record.verified_by,
-            purchase_record.use_count,
-            purchase_record.quantity; -- total_quantity is same as quantity
+            purchase_record.id, purchase_record.customer_name, purchase_record.customer_email, purchase_record.customer_phone,
+            purchase_record.event_id, purchase_record.event_title, purchase_record.event_date_text, purchase_record.event_time_text,
+            purchase_record.event_venue_name, purchase_record.ticket_type_id, purchase_record.ticket_name,
+            purchase_record.quantity, purchase_record.price_per_ticket, purchase_record.total_amount, purchase_record.currency_code,
+            purchase_record.status, (purchase_record.use_count >= purchase_record.quantity), purchase_record.used_at, purchase_record.verified_by,
+            purchase_record.use_count, purchase_record.quantity;
         RETURN;
     END IF;
 
-    -- If no ticket is found anywhere, log and raise error
     PERFORM public.log_verification_attempt(
-        p_ticket_identifier,
-        NULL,
-        NULL,
-        FALSE,
-        'TICKET_NOT_FOUND',
-        'No ticket found with this identifier'
+        p_ticket_identifier, NULL, NULL, FALSE, 'TICKET_NOT_FOUND', 'No ticket found with this identifier', p_scanner_email
     );
-    
     RAISE EXCEPTION 'TICKET_NOT_FOUND: Ticket not found in system';
 END;
 $$;
@@ -303,7 +231,7 @@ CREATE OR REPLACE FUNCTION public.mark_ticket_used(
     p_ticket_identifier TEXT,
     p_verified_by TEXT
 )
-RETURNS TEXT -- Returns a status message like 'SUCCESS', 'ALREADY_USED', 'NOT_FOUND', 'DUPLICATE_SCAN'
+RETURNS TEXT 
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
@@ -314,81 +242,51 @@ DECLARE
     last_scan_time TIMESTAMPTZ;
     time_since_last_scan INTERVAL;
 BEGIN
-    -- Try to find and mark in individual_tickets table
     SELECT * INTO individual_ticket FROM public.individual_tickets WHERE ticket_identifier = p_ticket_identifier;
 
     IF FOUND THEN
-        -- Check for duplicate scan (within 2 seconds)
         IF individual_ticket.used_at IS NOT NULL THEN
             time_since_last_scan := NOW() - individual_ticket.used_at;
             IF time_since_last_scan < INTERVAL '2 seconds' THEN
-                -- Log duplicate scan attempt
                 PERFORM public.log_verification_attempt(
-                    p_ticket_identifier,
-                    NULL, -- We'll fetch event_id below if needed
-                    NULL,
-                    FALSE,
-                    'DUPLICATE_SCAN',
-                    'Ticket scanned again within 2 seconds of last scan'
+                    p_ticket_identifier, NULL, NULL, FALSE, 'DUPLICATE_SCAN', 'Ticket scanned again within 2 seconds of last scan', p_verified_by
                 );
                 RETURN 'DUPLICATE_SCAN';
             END IF;
         END IF;
 
         IF individual_ticket.is_used THEN
-            -- Log already used attempt
             SELECT p.event_id, p.event_title INTO purchase_record 
-            FROM public.purchases p 
-            WHERE p.id = individual_ticket.purchase_id;
+            FROM public.purchases p WHERE p.id = individual_ticket.purchase_id;
             
             PERFORM public.log_verification_attempt(
-                p_ticket_identifier,
-                purchase_record.event_id,
-                purchase_record.event_title,
-                FALSE,
-                'ALREADY_USED',
-                'Ticket has already been used for entry'
+                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'ALREADY_USED', 'Ticket has already been used for entry', p_verified_by
             );
             RETURN 'ALREADY_USED';
         END IF;
 
-        -- Mark ticket as used
         UPDATE public.individual_tickets
         SET is_used = TRUE, used_at = NOW(), verified_by = p_verified_by, status = 'used', updated_at = NOW()
         WHERE id = individual_ticket.id;
         
-        -- Log successful admission
         SELECT p.event_id, p.event_title INTO purchase_record 
-        FROM public.purchases p 
-        WHERE p.id = individual_ticket.purchase_id;
+        FROM public.purchases p WHERE p.id = individual_ticket.purchase_id;
         
         PERFORM public.log_verification_attempt(
-            p_ticket_identifier,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            TRUE,
-            NULL,
-            'Individual ticket marked as used'
+            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, 'Individual ticket marked as used', p_verified_by
         );
         
         RETURN 'SUCCESS';
     END IF;
 
-    -- If not an individual ticket, handle legacy tickets
     SELECT * INTO purchase_record FROM public.purchases WHERE unique_ticket_identifier = p_ticket_identifier;
 
     IF FOUND THEN
-        -- Check for duplicate scan (within 2 seconds)
         IF purchase_record.used_at IS NOT NULL THEN
             time_since_last_scan := NOW() - purchase_record.used_at;
             IF time_since_last_scan < INTERVAL '2 seconds' THEN
                 PERFORM public.log_verification_attempt(
-                    p_ticket_identifier,
-                    purchase_record.event_id,
-                    purchase_record.event_title,
-                    FALSE,
-                    'DUPLICATE_SCAN',
-                    'Ticket scanned again within 2 seconds of last scan'
+                    p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'DUPLICATE_SCAN', 'Ticket scanned again within 2 seconds of last scan', p_verified_by
                 );
                 RETURN 'DUPLICATE_SCAN';
             END IF;
@@ -396,47 +294,25 @@ BEGIN
 
         IF purchase_record.use_count >= purchase_record.quantity THEN
             PERFORM public.log_verification_attempt(
-                p_ticket_identifier,
-                purchase_record.event_id,
-                purchase_record.event_title,
-                FALSE,
-                'ALREADY_USED',
-                'Legacy ticket fully used (all admissions consumed)'
+                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'ALREADY_USED', 'Legacy ticket fully used (all admissions consumed)', p_verified_by
             );
             RETURN 'ALREADY_USED';
         END IF;
 
-        -- Mark one admission as used
         UPDATE public.purchases
-        SET
-            use_count = purchase_record.use_count + 1,
-            used_at = NOW(), -- Update timestamp on each scan
-            verified_by = p_verified_by,
-            is_used = (purchase_record.use_count + 1) >= purchase_record.quantity, -- Set is_used to true only on the last scan
-            updated_at = NOW()
+        SET use_count = purchase_record.use_count + 1, used_at = NOW(), verified_by = p_verified_by,
+            is_used = (purchase_record.use_count + 1) >= purchase_record.quantity, updated_at = NOW()
         WHERE id = purchase_record.id;
         
-        -- Log successful admission
         PERFORM public.log_verification_attempt(
-            p_ticket_identifier,
-            purchase_record.event_id,
-            purchase_record.event_title,
-            TRUE,
-            NULL,
-            'Legacy ticket admission recorded'
+            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, 'Legacy ticket admission recorded', p_verified_by
         );
         
         RETURN 'SUCCESS';
     END IF;
 
-    -- Ticket not found
     PERFORM public.log_verification_attempt(
-        p_ticket_identifier,
-        NULL,
-        NULL,
-        FALSE,
-        'NOT_FOUND',
-        'Ticket identifier not found in system'
+        p_ticket_identifier, NULL, NULL, FALSE, 'NOT_FOUND', 'Ticket identifier not found in system', p_verified_by
     );
     
     RETURN 'NOT_FOUND';

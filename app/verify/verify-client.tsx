@@ -250,6 +250,94 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
   const [isVerified, setIsVerified] = useState(false);
   const [wasJustAdmitted, setWasJustAdmitted] = useState(false);
   const [flashColor, setFlashColor] = useState<"green" | "red" | null>(null);
+  const [offlineQueueLength, setOfflineQueueLength] = useState(0);
+
+  // --- Offline Queue Logic ---
+  const OFFLINE_QUEUE_KEY = "verify_offline_queue";
+
+  const getOfflineQueue = (): string[] => {
+    try {
+      const q = localStorage.getItem(OFFLINE_QUEUE_KEY);
+      return q ? JSON.parse(q) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const addToOfflineQueue = (ticketId: string) => {
+    try {
+      const queue = getOfflineQueue();
+      if (!queue.includes(ticketId)) {
+        queue.push(ticketId);
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        setOfflineQueueLength(queue.length);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const removeFromOfflineQueue = (ticketId: string) => {
+    try {
+      const queue = getOfflineQueue();
+      const newQueue = queue.filter((id) => id !== ticketId);
+      localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(newQueue));
+      setOfflineQueueLength(newQueue.length);
+    } catch {
+      // ignore
+    }
+  };
+
+  const processOfflineQueue = useCallback(async () => {
+    const queue = getOfflineQueue();
+    if (queue.length === 0) return;
+
+    for (const id of queue) {
+      try {
+        // Use standard fetch for offline background queue processing
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.split("//")[1].split(".")[0];
+
+        const response = await fetch(
+          `https://${projectRef}.supabase.co/functions/v1/verify-ticket`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              ticket_identifier: id,
+              verified_by: "staff_portal_offline_sync",
+              auto_admit: true,
+            }),
+            keepalive: true,
+          }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          // If success, or if it failed because it was ALREADY_USED (which means it was logged previously), remove it from queue.
+          if (result.success || result.error_code === "ALREADY_USED") {
+             removeFromOfflineQueue(id);
+          }
+        }
+      } catch (err) {
+        // Network error, leave in queue for later
+        console.error("Offline sync failed for", id, err);
+      }
+    }
+  }, []);
+
+  // Sync offline queue periodically and on mount
+  useEffect(() => {
+    setOfflineQueueLength(getOfflineQueue().length);
+    processOfflineQueue();
+    const interval = setInterval(processOfflineQueue, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, [processOfflineQueue]);
+  // ---------------------------
 
   // Check for cached PIN on component mount
   useEffect(() => {
@@ -364,27 +452,49 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
         }
       }
 
+      // Save to queue immediately so it's not lost if browser closes
+      if (!isRefreshCall) {
+        addToOfflineQueue(trimmedId);
+      }
+
       try {
         const result = await retryWithBackoff(async () => {
-          // Call the edge function for atomic verification and admission
-          const { data: response, error: edgeError } =
-            await supabase.functions.invoke("verify-ticket", {
-              body: {
-                ticket_identifier: trimmedId,
-                verified_by: "staff_portal",
-                auto_admit: true, // Always auto-admit valid tickets
-              },
-            });
-
-          if (edgeError) {
-            throw new Error(`Edge function error: ${edgeError.message}`);
+          
+          // Determine the function URL dynamically
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          
+          if (!projectUrl) {
+            throw new Error("Missing Supabase URL");
           }
 
-          if (!response || typeof response !== "object") {
-            throw new Error("Invalid response from verification service");
-          }
+          // We use fetch with keepalive:true because mobile browsers 
+          // abort network requests on page navigation (when using native photo app scanner).
+          // Edge Function URL format: https://[PROJECT_REF].supabase.co/functions/v1/verify-ticket
+          const functionUrl = `${projectUrl}/functions/v1/verify-ticket`;
 
-          return response;
+          const response = await fetch(functionUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              ticket_identifier: trimmedId,
+              verified_by: "staff_portal",
+              auto_admit: true,
+            }),
+            keepalive: true, 
+          });
+
+          if (!response.ok) {
+              const err = await response.json().catch(() => ({}));
+              throw new Error(err.error_message || `HTTP error! status: ${response.status}`);
+          }
+          
+          const resultData = await response.json();
+          return resultData;
         });
 
         // Type the result from retryWithBackoff
@@ -407,6 +517,11 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
               cleanupOldScanRecords();
             }
           }
+        }
+
+        // If we got a valid response from server (success or real rejection), we can remove from offline queue
+        if (!isRefreshCall) {
+          removeFromOfflineQueue(trimmedId);
         }
 
         if (!typedResult.success) {
