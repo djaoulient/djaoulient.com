@@ -32,13 +32,7 @@ TO service_role
 USING (true)
 WITH CHECK (true);
 
--- Allow authenticated users to insert and read (for staff verification app)
-CREATE POLICY "Allow authenticated insert on verification_attempts"
-ON public.verification_attempts
-FOR INSERT
-TO authenticated
-WITH CHECK (true);
-
+-- Allow authenticated users to read (for staff verification app)
 CREATE POLICY "Allow authenticated read on verification_attempts"
 ON public.verification_attempts
 FOR SELECT
@@ -47,7 +41,7 @@ USING (true);
 
 -- Grant permissions
 GRANT SELECT, INSERT ON public.verification_attempts TO service_role;
-GRANT SELECT, INSERT ON public.verification_attempts TO authenticated;
+GRANT SELECT ON public.verification_attempts TO authenticated;
 
 -- RPC Function to log verification attempts
 CREATE OR REPLACE FUNCTION public.log_verification_attempt(
@@ -90,8 +84,8 @@ END;
 $$;
 
 -- Grant execute permissions
-GRANT EXECUTE ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TEXT) TO authenticated;
 
 -- Function to get recent verification errors
 CREATE OR REPLACE FUNCTION public.get_recent_verification_errors(
@@ -157,6 +151,6 @@ GRANT EXECUTE ON FUNCTION public.cleanup_old_verification_logs() TO service_role
 
 -- Comments
 COMMENT ON TABLE public.verification_attempts IS 'Logs all ticket verification attempts for troubleshooting. Retains last 30 days.';
-COMMENT ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT) IS 'Logs a verification attempt with success status and optional error details';
+COMMENT ON FUNCTION public.log_verification_attempt(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, TEXT) IS 'Logs a verification attempt with success status and optional error details';
 COMMENT ON FUNCTION public.get_recent_verification_errors(INTEGER, TEXT) IS 'Returns recent failed verification attempts, optionally filtered by event';
 COMMENT ON FUNCTION public.cleanup_old_verification_logs() IS 'Deletes verification logs older than 30 days';

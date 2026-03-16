@@ -68,7 +68,11 @@ BEGIN
         (
             CASE 
                 WHEN p.individual_tickets_generated THEN 
-                    (SELECT COUNT(*) FROM public.individual_tickets WHERE purchase_id = p.id AND is_used = TRUE)
+                    (
+                        SELECT COUNT(*) 
+                        FROM public.individual_tickets it 
+                        WHERE it.purchase_id = p.id AND it.is_used = TRUE
+                    )
                 ELSE 
                     p.use_count::BIGINT
             END
@@ -149,7 +153,11 @@ BEGIN
         (
             CASE 
                 WHEN p.individual_tickets_generated THEN 
-                    (SELECT COUNT(*) FROM public.individual_tickets WHERE purchase_id = p.id AND is_used = TRUE)
+                    (
+                        SELECT COUNT(*) 
+                        FROM public.individual_tickets it 
+                        WHERE it.purchase_id = p.id AND it.is_used = TRUE
+                    )
                 ELSE 
                     p.use_count::BIGINT
             END
