@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { PortableText } from "@portabletext/react";
+import { PortableText, type PortableTextComponents } from "@portabletext/react";
 import { Button } from "@/components/ui/button";
 import { PlusIcon, MinusIcon } from "lucide-react";
 import { motion } from "framer-motion";
@@ -90,6 +90,83 @@ interface ProductDetailContentProps {
 const capitalizeColorName = (name: string): string => {
   if (!name) return "";
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+};
+
+const descriptionComponents: PortableTextComponents = {
+  block: {
+    normal: ({ children }) => (
+      <p className="mb-3 text-sm md:text-base leading-relaxed">{children}</p>
+    ),
+    h2: ({ children }) => (
+      <h2 className="mt-5 mb-2 text-lg md:text-xl font-semibold text-foreground">
+        {children}
+      </h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="mt-4 mb-2 text-base md:text-lg font-semibold text-foreground">
+        {children}
+      </h3>
+    ),
+  },
+  list: {
+    bullet: ({ children }) => (
+      <ul className="mb-3 list-disc list-inside space-y-0.5 text-sm md:text-base">
+        {children}
+      </ul>
+    ),
+    number: ({ children }) => (
+      <ol className="mb-3 list-decimal list-inside space-y-0.5 text-sm md:text-base">
+        {children}
+      </ol>
+    ),
+  },
+  marks: {
+    strong: ({ children }) => (
+      <strong className="font-semibold text-foreground">{children}</strong>
+    ),
+    em: ({ children }) => <em className="italic">{children}</em>,
+    link: ({ value, children }) => {
+      const href = (value as { href?: string })?.href || "#";
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          {children}
+        </a>
+      );
+    },
+  },
+  types: {
+    image: ({ value }) => {
+      const image = value as {
+        asset?: { url?: string };
+        alt?: string;
+        caption?: string;
+      };
+      const url = image.asset?.url;
+      if (!url) return null;
+      return (
+        <figure className="my-6">
+          <div className="relative w-full overflow-hidden rounded-sm border border-border/30 bg-muted aspect-[4/3]">
+            <Image
+              src={url}
+              alt={image.alt || image.caption || "Product detail"}
+              fill
+              className="object-cover"
+            />
+          </div>
+          {image.caption && (
+            <figcaption className="mt-2 text-xs text-muted-foreground text-center">
+              {image.caption}
+            </figcaption>
+          )}
+        </figure>
+      );
+    },
+  },
 };
 
 function ProductDetail({ product }: ProductDetailContentProps) {
@@ -248,8 +325,8 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                 >
                   {typeof product.price === "number"
                     ? product.price
-                        .toString()
-                        .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
+                      .toString()
+                      .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
                     : "0"}{" "}
                   F CFA
                 </motion.p>
@@ -286,7 +363,7 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                               ? "border-border dark:border-gray-500"
                               : "border-border dark:border-gray-600",
                           !color.available &&
-                            "opacity-40 cursor-not-allowed hover:ring-0 focus-visible:ring-0",
+                          "opacity-40 cursor-not-allowed hover:ring-0 focus-visible:ring-0",
                           isMix && "bg-white",
                         )}
                         style={
@@ -351,7 +428,7 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-card text-foreground hover:border-primary",
                         !size.available &&
-                          "cursor-not-allowed border-border text-muted-foreground opacity-50",
+                        "cursor-not-allowed border-border text-muted-foreground opacity-50",
                       )}
                     >
                       {size.name}
@@ -389,18 +466,21 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                       )}
                     >
                       {typeof product.stock === "number" &&
-                      product.stock > 0 &&
-                      !isOutOfStock
+                        product.stock > 0 &&
+                        !isOutOfStock
                         ? `${product.stock} in stock`
                         : "Out of Stock"}
                     </div>
                   )}
                 </div>
-                <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-line">
+                <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-line prose-headings:text-foreground prose-strong:text-foreground prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-ul:list-disc prose-ol:list-decimal prose-li:marker:text-muted-foreground/70">
                   {typeof product.description === "string" ? (
                     <p>{product.description}</p>
                   ) : Array.isArray(product.description) ? (
-                    <PortableText value={product.description} />
+                    <PortableText
+                      value={product.description}
+                      components={descriptionComponents}
+                    />
                   ) : (
                     <p>No description available</p>
                   )}
@@ -477,18 +557,18 @@ function ProductDetail({ product }: ProductDetailContentProps) {
                     >
                       {isOutOfStock
                         ? t(
-                            currentLanguage,
-                            "merchPage.productDetail.outOfStock",
-                          ) || "Out of Stock"
+                          currentLanguage,
+                          "merchPage.productDetail.outOfStock",
+                        ) || "Out of Stock"
                         : !hasAvailableSizes || !hasValidSizeSelection
                           ? t(
-                              currentLanguage,
-                              "merchPage.productDetail.noSizeAvailable",
-                            ) || "No size available"
+                            currentLanguage,
+                            "merchPage.productDetail.noSizeAvailable",
+                          ) || "No size available"
                           : t(
-                              currentLanguage,
-                              "merchPage.productDetail.addToCart",
-                            )}
+                            currentLanguage,
+                            "merchPage.productDetail.addToCart",
+                          )}
                     </Button>
                     <Button
                       className="w-full h-14 text-lg font-semibold rounded-sm bg-blue-600 hover:bg-blue-700 text-white"

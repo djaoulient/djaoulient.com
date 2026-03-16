@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCart } from "./cart/cart-context";
 import { SanityProduct } from "./types";
+import { useTheme } from "@/lib/contexts/ThemeContext";
+import { useTranslation } from "@/lib/contexts/TranslationContext";
+import { t } from "@/lib/i18n/translations";
 
 function ProductCardContent({ product }: { product: SanityProduct }) {
   const { addItem } = useCart();
+  const { button } = useTheme();
+  const { currentLanguage } = useTranslation();
   const slug =
     typeof product.slug === "string"
       ? product.slug
@@ -88,7 +93,7 @@ function ProductCardContent({ product }: { product: SanityProduct }) {
               <Button
                 size="sm"
                 disabled
-                className="rounded-sm px-4 py-2 text-xs font-medium bg-teal-800 text-teal-200"
+                className={`rounded-sm px-4 py-2 text-xs font-medium ${button.primary}`}
               >
                 ...
               </Button>
@@ -96,10 +101,10 @@ function ProductCardContent({ product }: { product: SanityProduct }) {
           >
             <Button
               size="sm"
-              className="rounded-sm px-4 py-2 text-xs font-medium bg-teal-800 hover:bg-teal-700 text-teal-200 transition-colors"
+              className={`rounded-sm px-4 py-2 text-xs font-medium transition-colors ${button.primary}`}
               onClick={handleAddToCart}
             >
-              Add to Cart
+              {t(currentLanguage, "merchPage.productDetail.addToCart")}
             </Button>
           </Suspense>
         </div>
