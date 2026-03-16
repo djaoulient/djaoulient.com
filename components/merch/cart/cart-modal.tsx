@@ -24,7 +24,7 @@ const CartContainer = ({
   children: React.ReactNode;
   className?: string;
 }) => {
-  return <div className={cn("px-2 md:px-4", className)}>{children}</div>;
+  return <div className={cn("px-1 md:px-4", className)}>{children}</div>;
 };
 
 const CartItems = ({
@@ -455,7 +455,7 @@ export default function CartModal() {
                   }
                   onClick={(e) => e.stopPropagation()} // Prevent event bubbling to cart button
                 >
-                  <div className="flex flex-col py-4 px-3 md:px-4 w-full bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl max-h-[70vh] md:max-h-none">
+                  <div className="flex flex-col py-4 px-2 md:px-4 w-full bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl max-h-[70vh] md:max-h-none">
                     <CartContainer className="flex justify-between items-center mb-8">
                       <div>
                         <h2 className="text-3xl font-bold text-foreground">
