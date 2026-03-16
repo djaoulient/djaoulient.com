@@ -346,14 +346,7 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                     {/* List Ticket Types */}
                     {hasDefinedTickets && (
                       <div className="space-y-3">
-                        {event.ticketTypes?.map((ticket) => {
-                          console.log(
-                            "Event page - ticket.productId:",
-                            ticket.productId,
-                            "for ticket:",
-                            ticket.name,
-                          );
-                          return (
+                        {event.ticketTypes?.map((ticket) => (
                             <Card
                               key={ticket._key}
                               className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
@@ -485,8 +478,7 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                                 </div>
                               </div>
                             </Card>
-                          );
-                        })}
+                        ))}
                       </div>
                     )}
 
@@ -496,14 +488,7 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                         <h3 className="font-medium text-lg">
                           {t(currentLanguage, "eventSlugPage.bundles.title")}
                         </h3>
-                        {event.bundles?.map((bundle) => {
-                          console.log(
-                            "Event page - bundle.productId:",
-                            bundle.productId,
-                            "for bundle:",
-                            bundle.name,
-                          );
-                          return (
+                        {event.bundles?.map((bundle) => (
                             <Card
                               key={bundle.bundleId.current}
                               className="border-slate-700 bg-background shadow-lg rounded-sm overflow-hidden flex flex-col"
@@ -636,8 +621,7 @@ export default function EventPageContent({ event }: EventPageContentProps) {
                                 </div>
                               </div>
                             </Card>
-                          );
-                        })}
+                        ))}
                       </div>
                     )}
                   </div>

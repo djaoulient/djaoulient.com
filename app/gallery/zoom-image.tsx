@@ -1,0 +1,106 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect } from "react";
+import type { ImageProps } from "@/lib/utils/types";
+import { Download } from "lucide-react";
+
+type ZoomImageProps = {
+  images: ImageProps[];
+  initialIndex: number;
+  onClose: () => void;
+};
+
+export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
+  useEffect(() => {
+    const el = document.getElementById(`zoom-image-${initialIndex}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [initialIndex]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 p-4 flex overflow-x-hidden"
+      onClick={onClose}
+    >
+      {/* Scrollable vertical column of images */}
+      <div
+        className="mx-auto max-w-5xl w-full overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col items-center gap-8 py-4">
+          {images.map((img, index) => {
+            const numericWidth = parseInt(img.width, 10);
+            const numericHeight = parseInt(img.height, 10);
+            const isValidDimensions =
+              !isNaN(numericWidth) && !isNaN(numericHeight);
+            const isLandscape =
+              isValidDimensions && numericWidth > numericHeight;
+
+            const baseUrl = img.url.split("?")[0];
+            // Request at most the original width, but cap for performance
+            const imageSrcWidth = isValidDimensions
+              ? Math.min(numericWidth, 1600)
+              : isLandscape
+                ? 1400
+                : 1000;
+            const imageSrc = `${baseUrl}?w=${imageSrcWidth}&auto=format&q=90`;
+
+            // Use original dimensions when available (no artificial upscaling)
+            const baseWidth = isValidDimensions
+              ? numericWidth
+              : isLandscape
+                ? 1400
+                : 1000;
+            const baseHeight = isValidDimensions
+              ? numericHeight
+              : isLandscape
+                ? 900
+                : 1200;
+
+            const imageSizes = `(max-width: 767px) 90vw, ${
+              isLandscape ? "70vw" : "55vw"
+            }`;
+
+            return (
+              <div
+                key={img.id ?? index}
+                id={`zoom-image-${index}`}
+                className="w-full flex justify-center"
+              >
+                <div className="relative inline-block max-w-full">
+                  <Image
+                    alt={
+                      img.title
+                        ? `Gallery - ${img.title}`
+                        : `Gallery photo ${img.id ?? index}`
+                    }
+                    className="object-contain rounded-md max-h-[65vh] max-w-[70vw]"
+                    style={{ transform: "translate3d(0, 0, 0)" }}
+                    src={imageSrc}
+                    width={baseWidth}
+                    height={baseHeight}
+                    sizes={imageSizes}
+                    loading={index === initialIndex ? "eager" : "lazy"}
+                  />
+
+                  {/* Download button – inside image, bottom-right */}
+                  <a
+                    href={`/api/download-image?url=${encodeURIComponent(img.url)}`}
+                    className="absolute bottom-3 right-3 inline-flex items-center justify-center rounded-sm bg-black/80 px-2 py-1 text-white hover:bg-white hover:text-black border border-white/60 hover:border-white transition-colors shadow-md"
+                    aria-label="Download image"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+

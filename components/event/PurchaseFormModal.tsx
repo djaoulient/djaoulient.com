@@ -266,8 +266,6 @@ export default function PurchaseFormModal({
 
     setIsLoading(true);
 
-    console.log("PurchaseFormModal - item.productId:", item.productId);
-
     const shouldAllowQuantity =
       (item.maxPerOrder && item.maxPerOrder > 1) ||
       item.stock === null ||
