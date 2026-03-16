@@ -4,10 +4,8 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { t } from "@/lib/i18n/translations";
 import Image from "next/image";
-import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import { Button } from "@/components/ui/button";
 
 const codeItemsData = [
   {
@@ -157,19 +155,35 @@ export default function DjaouliCodeDialog({
             }}
           />
 
-          {/* Panel */}
+          {/* Panel - slides from bottom on mobile, from left on desktop */}
           <motion.div
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
+            {...(isMobile
+              ? {
+                  initial: { y: "100%" },
+                  animate: { y: 0 },
+                  exit: { y: "100%" },
+                }
+              : {
+                  initial: { x: "-100%" },
+                  animate: { x: 0 },
+                  exit: { x: "-100%" },
+                })}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="fixed top-0 bottom-0 left-0 flex w-full md:w-[500px] p-4 z-[70] will-change-transform pointer-events-auto"
-            style={{ position: "fixed", top: 0, left: 0, bottom: 0 }}
+            className={
+              isMobile
+                ? "fixed inset-x-0 bottom-0 flex w-full z-[70] will-change-transform pointer-events-auto"
+                : "fixed top-0 bottom-0 left-0 flex w-full md:w-[500px] p-4 z-[70] will-change-transform pointer-events-auto"
+            }
+            style={
+              isMobile
+                ? { position: "fixed", left: 0, right: 0, bottom: 0 }
+                : { position: "fixed", top: 0, left: 0, bottom: 0 }
+            }
             onClick={(e) => e.stopPropagation()} // Prevent event bubbling to backdrop
           >
-            <div className="flex flex-col w-full bg-[#1a1a1a] backdrop-blur-xl rounded-sm shadow-2xl">
+            <div className="flex flex-col w-full bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl max-h-[70vh] md:max-h-none py-4 px-3 md:px-4">
               {/* Header */}
-              <div className="flex justify-between items-center px-3 md:px-4 py-6 mb-0">
+              <div className="flex items-center mb-4">
                 <div className="flex-1">
                   <Image
                     src="/code.webp"
@@ -179,27 +193,17 @@ export default function DjaouliCodeDialog({
                     className="object-contain"
                   />
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="hover:bg-muted/50"
-                  aria-label="Close modal"
-                  onClick={handleClose}
-                  type="button"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
 
-              {/* Form Content */}
-              <div className="flex-1 overflow-y-auto px-3 md:px-4">
-                <div className="py-4">
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="py-2">
                   <div className="grid gap-3 grid-cols-1">{itemsToRender}</div>
                 </div>
               </div>
 
               {/* Footer with Gotcha Button */}
-              <div className="px-3 md:px-4 py-4 border-t border-border">
+              <div className="pt-3 border-t border-border mt-3">
                 <button
                   onClick={handleClose}
                   className="bg-teal-800 hover:bg-teal-700 text-teal-200 rounded-sm text-sm w-full font-medium h-10 transition-all shadow-lg hover:shadow-xl transform hover:scale-[0.98] active:scale-[0.95]"

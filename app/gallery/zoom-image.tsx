@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ImageProps } from "@/lib/utils/types";
 import { Download } from "lucide-react";
+import { useIsMobile } from "@/lib/utils/use-is-mobile";
 
 type ZoomImageProps = {
   images: ImageProps[];
@@ -12,6 +13,9 @@ type ZoomImageProps = {
 };
 
 export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
+  const isMobile = useIsMobile();
+  const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
+
   useEffect(() => {
     const el = document.getElementById(`zoom-image-${initialIndex}`);
     if (el) {
@@ -19,15 +23,25 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
     }
   }, [initialIndex]);
 
+  const handleClose = () => {
+    setZoomedIndex(null);
+    onClose();
+  };
+
+  const handleImageClick = (index: number) => {
+    if (!isMobile) return;
+
+    setZoomedIndex((current) => (current === index ? null : index));
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/90 p-4 flex overflow-x-hidden"
-      onClick={onClose}
+      onClick={handleClose}
     >
       {/* Scrollable vertical column of images */}
       <div
         className="mx-auto max-w-5xl w-full overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col items-center gap-8 py-4">
           {images.map((img, index) => {
@@ -63,20 +77,30 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
               isLandscape ? "70vw" : "55vw"
             }`;
 
+            const isZoomed = isMobile && zoomedIndex === index;
+            const imageMaxWidth = isZoomed ? "max-w-[100vw]" : "max-w-[70vw]";
+            const imageMaxHeight = isZoomed ? "max-h-[85vh]" : "max-h-[65vh]";
+
             return (
               <div
                 key={img.id ?? index}
                 id={`zoom-image-${index}`}
                 className="w-full flex justify-center"
               >
-                <div className="relative inline-block max-w-full">
+                <div
+                  className="relative inline-block max-w-full"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleImageClick(index);
+                  }}
+                >
                   <Image
                     alt={
                       img.title
                         ? `Gallery - ${img.title}`
                         : `Gallery photo ${img.id ?? index}`
                     }
-                    className="object-contain rounded-md max-h-[65vh] max-w-[70vw]"
+                    className={`object-contain rounded-md ${imageMaxHeight} ${imageMaxWidth}`}
                     style={{ transform: "translate3d(0, 0, 0)" }}
                     src={imageSrc}
                     width={baseWidth}

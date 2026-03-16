@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusCircleIcon, ShoppingCart, X } from "lucide-react";
+import { PlusCircleIcon, ShoppingCart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useCart } from "./cart-context";
@@ -15,6 +15,7 @@ import CartPurchaseForm from "./cart-purchase-form";
 import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { useTheme } from "@/lib/contexts/ThemeContext";
 import { t } from "@/lib/i18n/translations";
+import { useIsMobile } from "@/lib/utils/use-is-mobile";
 
 const CartContainer = ({
   children,
@@ -23,7 +24,7 @@ const CartContainer = ({
   children: React.ReactNode;
   className?: string;
 }) => {
-  return <div className={cn("px-3 md:px-4", className)}>{children}</div>;
+  return <div className={cn("px-2 md:px-4", className)}>{children}</div>;
 };
 
 const CartItems = ({
@@ -93,10 +94,10 @@ const CartItems = ({
                 </p>
                 <p className="text-foreground">
                   {cart.cost.shippingAmount &&
-                  Number(cart.cost.shippingAmount.amount) > 0
+                    Number(cart.cost.shippingAmount.amount) > 0
                     ? `${Number(cart.cost.shippingAmount.amount).toLocaleString(
-                        "fr-FR",
-                      )} F CFA`
+                      "fr-FR",
+                    )} F CFA`
                     : t(currentLanguage, "cartModal.freeShipping")}
                 </p>
               </div>
@@ -185,6 +186,7 @@ export default function CartModal() {
   const { cart } = useCart();
   const { currentLanguage } = useTranslation();
   const { button } = useTheme();
+  const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
@@ -425,33 +427,41 @@ export default function CartModal() {
                   }}
                 />
 
-                {/* Panel */}
+                {/* Panel - slides from bottom on mobile, from right on desktop */}
                 <motion.div
                   key="cart-panel"
-                  initial={{ x: "100%" }}
-                  animate={{ x: 0 }}
-                  exit={{ x: "100%" }}
+                  {...(isMobile
+                    ? {
+                      initial: { y: "100%" },
+                      animate: { y: 0 },
+                      exit: { y: "100%" },
+                    }
+                    : {
+                      initial: { x: "100%" },
+                      animate: { x: 0 },
+                      exit: { x: "100%" },
+                    })}
                   transition={{ duration: 0.3, ease: "easeInOut" }}
-                  className="fixed top-0 bottom-0 right-0 flex w-full md:w-[500px] p-4 z-70 will-change-transform"
-                  style={{ position: "fixed", top: 0, right: 0, bottom: 0 }}
+                  className={cn(
+                    "fixed z-70 will-change-transform flex w-full",
+                    isMobile
+                      ? "inset-x-0 bottom-0"
+                      : "top-0 bottom-0 right-0 md:w-[500px]",
+                  )}
+                  style={
+                    isMobile
+                      ? { position: "fixed", left: 0, right: 0, bottom: 0 }
+                      : { position: "fixed", top: 0, right: 0, bottom: 0 }
+                  }
                   onClick={(e) => e.stopPropagation()} // Prevent event bubbling to cart button
                 >
-                  <div className="flex flex-col py-6 w-full bg-[#1a1a1a] backdrop-blur-xl rounded-sm shadow-2xl">
+                  <div className="flex flex-col py-4 px-3 md:px-4 w-full bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl max-h-[70vh] md:max-h-none">
                     <CartContainer className="flex justify-between items-center mb-8">
                       <div>
                         <h2 className="text-3xl font-bold text-foreground">
                           {t(currentLanguage, "cartModal.cart")}
                         </h2>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="hover:bg-muted/50"
-                        aria-label="Close cart"
-                        onClick={closeCart}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
                     </CartContainer>
 
                     {renderCartContent()}

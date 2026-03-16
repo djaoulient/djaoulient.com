@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Ticket, Plus, Minus, X } from "lucide-react";
+import { Loader2, Ticket, Plus, Minus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { t } from "@/lib/i18n/translations";
@@ -12,6 +12,7 @@ import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { SupabaseClient } from "@supabase/supabase-js";
 import PhoneNumberInput from "@/components/ui/phone-number-input";
 import DjaouliCodeDialog from "@/components/landing/djaouli-code";
+import { useIsMobile } from "@/lib/utils/use-is-mobile";
 
 const PURCHASE_MODAL_PORTAL_ID = "purchase-modal-portal";
 const ANIMATION_DURATION_MS = 300;
@@ -81,6 +82,7 @@ export default function PurchaseFormModal({
   supabaseClient,
 }: PurchaseFormModalProps) {
   const { currentLanguage } = useTranslation();
+  const isMobile = useIsMobile();
   const [quantity, setQuantity] = useState(1);
   const [quantityDisplay, setQuantityDisplay] = useState("1");
   const [userName, setUserName] = useState("");
@@ -309,7 +311,7 @@ export default function PurchaseFormModal({
         console.error("Supabase function error:", functionError);
         setError(
           functionError.message ||
-            t(currentLanguage, "purchaseModal.errors.functionError"),
+          t(currentLanguage, "purchaseModal.errors.functionError"),
         );
         setIsLoading(false);
         return;
@@ -322,7 +324,7 @@ export default function PurchaseFormModal({
         console.error("Lomi checkout URL not found in response:", data);
         setError(
           data.error ||
-            t(currentLanguage, "purchaseModal.errors.lomiUrlMissing"),
+          t(currentLanguage, "purchaseModal.errors.lomiUrlMissing"),
         );
       }
     } catch (e: unknown) {
@@ -392,23 +394,38 @@ export default function PurchaseFormModal({
               }}
             />
 
-            {/* Panel - stable key for smooth slide-out exit on desktop */}
+            {/* Panel - slides from bottom on mobile, from right on desktop */}
             <motion.div
               key="purchase-panel"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              {...(isMobile
+                ? {
+                  initial: { y: "100%" },
+                  animate: { y: 0 },
+                  exit: { y: "100%" },
+                }
+                : {
+                  initial: { x: "100%" },
+                  animate: { x: 0 },
+                  exit: { x: "100%" },
+                })}
               transition={{
                 duration: ANIMATION_DURATION_MS / 1000,
                 ease: "easeInOut",
               }}
-              className="fixed top-0 bottom-0 right-0 flex w-full md:w-[500px] z-[70] will-change-transform pointer-events-auto"
-              style={{ position: "fixed", top: 0, right: 0, bottom: 0 }}
+              className={`fixed z-[70] will-change-transform pointer-events-auto ${isMobile
+                ? "inset-x-0 bottom-0 flex w-full"
+                : "top-0 bottom-0 right-0 flex w-full md:w-[500px]"
+                }`}
+              style={
+                isMobile
+                  ? { position: "fixed", left: 0, right: 0, bottom: 0 }
+                  : { position: "fixed", top: 0, right: 0, bottom: 0 }
+              }
               onClick={(e) => e.stopPropagation()} // Prevent event bubbling to backdrop
             >
-              <div className="flex flex-col w-full h-full min-h-0 bg-[#1a1a1a] backdrop-blur-xl rounded-sm shadow-2xl">
+              <div className="flex flex-col w-full h-[70vh] md:h-full min-h-0 bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-none shadow-2xl p-4">
                 {/* Header */}
-                <div className="flex justify-between items-center px-4 py-4 md:py-6 flex-shrink-0">
+                <div className="flex items-start py-4 md:py-6 flex-shrink-0">
                   <div>
                     <h2 className="text-2xl md:text-3xl font-bold text-foreground">
                       {t(currentLanguage, "purchaseModal.title")}
@@ -417,20 +434,10 @@ export default function PurchaseFormModal({
                       {t(currentLanguage, "purchaseModal.description")}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="hover:bg-muted/50 flex-shrink-0"
-                    aria-label="Close modal"
-                    onClick={onClose}
-                    type="button"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
                 </div>
 
                 {/* Form Content */}
-                <div className="flex-1 overflow-y-auto px-4 min-h-0">
+                <div className="flex-1 overflow-y-auto min-h-0">
                   <form onSubmit={handleSubmit} className="space-y-6 py-2">
                     {/* Item Details */}
                     <div className="bg-muted/30 p-4 rounded-sm">
@@ -582,12 +589,12 @@ export default function PurchaseFormModal({
                 </div>
 
                 {/* Footer with Submit Button */}
-                <div className="px-4 py-6 border-t border-border flex-shrink-0">
+                <div className="px-3 md:px-4 py-4 border-t border-border flex-shrink-0">
                   <Button
                     type="submit"
                     disabled={isLoading || !isFormValid()}
                     onClick={handleSubmit}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-base w-full font-semibold h-14"
+                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm md:text-base w-full font-semibold h-11 md:h-12 flex items-center justify-center gap-2"
                   >
                     {isLoading ? (
                       <>
