@@ -426,19 +426,17 @@
       "pinPlaceholder": "Entrez le PIN à 4 chiffres",
       "verifyButton": "Vérifier le PIN",
       "verifying": "Vérification...",
-      "staffOnly": "Accès personnel uniquement. L'accès non autorisé est interdit."
+      "staffOnly": "Accès personnel uniquement."
     },
     "status": {
       "invalid": "Ticket invalide",
       "unpaid": "Paiement requis",
-      "alreadyUsed": "Déjà enregistré",
       "valid": "Prêt pour l'entrée",
-      "fullyUsed": "Ticket entièrement utilisé"
+      "fullyUsed": "Ticket déjà utilisé"
     },
     "badges": {
       "invalid": "❌ INVALIDE",
       "unpaid": "💰 NON PAYÉ",
-      "alreadyUsed": "⚠️ DÉJÀ UTILISÉ",
       "valid": "✅ VALIDE",
       "fullyUsed": "Entièrement utilisé"
     },
@@ -452,7 +450,6 @@
       "invalidPin": "❌ PIN invalide. Accès refusé."
     },
     "warnings": {
-      "alreadyUsed": "⚠️ Ce ticket a déjà été utilisé",
       "entryNotPermitted": "Entrée non autorisée sauf si le client montre une preuve d'entrée précédente",
       "fullyUsed": "Ce ticket a déjà été utilisé."
     },
@@ -464,7 +461,8 @@
       "people": "personnes",
       "person": "personne",
       "scanned": "scanné",
-      "remaining": "restant"
+      "remaining": "restant",
+      "remainingOfTotal": "{remaining} sur {total} restant"
     },
     "checkedInLabel": "Enregistré :"
   },

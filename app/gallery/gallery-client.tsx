@@ -190,7 +190,7 @@ export default function GalleryClientComponent() {
                 <h2 className="text-2xl sm:text-3xl font-medium text-zinc-800 dark:text-white mb-6 tracking-tight">
                   {sectionTitle}
                 </h2>
-                <div className="columns-1 gap-4 sm:columns-2 xl:columns-3 2xl:columns-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {sectionImages.map(
                     ({ id, url, width, height, tags }, index) => {
                       const numericWidth = parseInt(width, 10);
