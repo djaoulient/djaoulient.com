@@ -325,13 +325,22 @@ export default function AdminClient() {
 
   const loadEvents = async () => {
     try {
+      // Always use "all" for event list so the dropdown stays stable when switching
+      // status filters (paid/pending/failed). Otherwise, clicking "Failed" would
+      // replace the list with only events that have failed purchases, causing the
+      // selected event to disappear and the dropdown to show "All Events" or blank.
       const { data, error } = await supabase.rpc("get_admin_events_list", {
-        p_status_filter: statusFilter,
+        p_status_filter: "all",
       });
       if (error) {
         console.error("Error loading events:", error);
       } else {
-        setEvents(data || []);
+        // Filter out events with null/empty event_id to prevent "event without title"
+        // (can occur when purchases have null event_id - they group into one row)
+        const validEvents = (data || []).filter(
+          (e: EventInfo) => e.event_id && String(e.event_id).trim() !== "",
+        );
+        setEvents(validEvents);
       }
     } catch (error) {
       console.error("Error loading events:", error);
@@ -639,6 +648,10 @@ export default function AdminClient() {
 
   // Filter purchases by status AND search (for table display)
   const filteredPurchases = statusFilteredPurchases.filter((purchase) => {
+    // Event filter: when an event is selected, only show its purchases
+    // (defense-in-depth: backend should filter, but search/race conditions can mix data)
+    if (selectedEvent && purchase.event_id !== selectedEvent) return false;
+
     // Admission filter
     if (admissionFilter === "scanned" && !purchase.is_used) return false;
     if (admissionFilter === "unscanned" && purchase.is_used) return false;

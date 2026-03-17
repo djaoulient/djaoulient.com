@@ -47,13 +47,17 @@ BEGIN
         FROM public.purchases p
         LEFT JOIN public.individual_tickets it ON it.purchase_id = p.id
         WHERE
-            CASE
-                WHEN p_status_filter = 'paid' THEN p.status = 'paid'
-                WHEN p_status_filter = 'pending' THEN p.status = 'pending_payment'
-                WHEN p_status_filter = 'failed' THEN p.status = 'payment_failed'
-                WHEN p_status_filter = 'all' THEN TRUE
-                ELSE p.status = 'paid' -- Default to paid
-            END
+            p.event_id IS NOT NULL
+            AND TRIM(p.event_id) != ''
+            AND (
+                CASE
+                    WHEN p_status_filter = 'paid' THEN p.status = 'paid'
+                    WHEN p_status_filter = 'pending' THEN p.status = 'pending_payment'
+                    WHEN p_status_filter = 'failed' THEN p.status = 'payment_failed'
+                    WHEN p_status_filter = 'all' THEN TRUE
+                    ELSE p.status = 'paid' -- Default to paid
+                END
+            )
         GROUP BY p.event_id
     ) event_stats
     ORDER BY event_stats.last_purchase_date DESC;
@@ -140,7 +144,7 @@ BEGIN
         ) as scanned_count
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
-    WHERE p.event_id = p_event_id
+    WHERE p.event_id = $1
     ORDER BY p.created_at DESC;
 END;
 $$;
