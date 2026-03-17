@@ -57,6 +57,9 @@ const RETRY_DELAY_MS = 1000; // 1 second
 // eslint-disable-next-line prefer-const
 let lastScannedTickets: Map<string, number> = new Map();
 
+// Track tickets currently being processed to prevent duplicate API calls
+const inFlightTickets: Set<string> = new Set();
+
 // Clean up old scan records to prevent memory leaks
 const cleanupOldScanRecords = () => {
   const now = Date.now();
@@ -292,33 +295,30 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
     const queue = getOfflineQueue();
     if (queue.length === 0) return;
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token =
+      sessionData?.session?.access_token ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!token || !projectUrl) return;
+
+    const functionUrl = `${projectUrl.replace(/\/$/, "")}/functions/v1/verify-ticket`;
+
     for (const id of queue) {
       try {
-        // Use standard fetch for offline background queue processing
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token =
-          sessionData?.session?.access_token ||
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.split("//")[1].split(".")[0];
-
-        if (!token) continue; // Skip if no credentials
-
-        const response = await fetch(
-          `https://${projectRef}.supabase.co/functions/v1/verify-ticket`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              ticket_identifier: id,
-              verified_by: "staff_portal_offline_sync",
-              auto_admit: true,
-            }),
-            keepalive: true,
-          }
-        );
+        const response = await fetch(functionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ticket_identifier: id,
+            verified_by: "staff_portal_offline_sync",
+            auto_admit: true,
+          }),
+          keepalive: true,
+        });
 
         if (response.ok) {
           const result = await response.json();
@@ -454,10 +454,17 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
           setIsLoading(false);
           return;
         }
-      }
 
-      // Save to queue immediately so it's not lost if browser closes
-      if (!isRefreshCall) {
+        // Prevent duplicate in-flight requests for the same ticket
+        if (inFlightTickets.has(trimmedId)) {
+          setError("This ticket is currently being processed. Please wait.");
+          setIsLoading(false);
+          return;
+        }
+
+        inFlightTickets.add(trimmedId);
+
+        // Save to queue immediately so it's not lost if browser closes
         addToOfflineQueue(trimmedId);
       }
 
@@ -481,7 +488,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
           // We use fetch with keepalive:true because mobile browsers 
           // abort network requests on page navigation (when using native photo app scanner).
           // Edge Function URL format: https://[PROJECT_REF].supabase.co/functions/v1/verify-ticket
-          const functionUrl = `${projectUrl}/functions/v1/verify-ticket`;
+          const functionUrl = `${projectUrl.replace(/\/$/, "")}/functions/v1/verify-ticket`;
 
           const response = await fetch(functionUrl, {
             method: "POST",
@@ -608,6 +615,9 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
         }
       } finally {
         setIsLoading(false);
+        if (!isRefreshCall) {
+          inFlightTickets.delete(trimmedId);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
