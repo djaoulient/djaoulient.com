@@ -250,7 +250,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
   const [isVerified, setIsVerified] = useState(false);
   const [wasJustAdmitted, setWasJustAdmitted] = useState(false);
   const [flashColor, setFlashColor] = useState<"green" | "red" | null>(null);
-  const [offlineQueueLength, setOfflineQueueLength] = useState(0);
+  const [, setOfflineQueueLength] = useState(0);
 
   // --- Offline Queue Logic ---
   const OFFLINE_QUEUE_KEY = "verify_offline_queue";
@@ -277,7 +277,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
     }
   };
 
-  const removeFromOfflineQueue = (ticketId: string) => {
+  const removeFromOfflineQueue = useCallback((ticketId: string) => {
     try {
       const queue = getOfflineQueue();
       const newQueue = queue.filter((id) => id !== ticketId);
@@ -286,7 +286,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
   const processOfflineQueue = useCallback(async () => {
     const queue = getOfflineQueue();
@@ -296,8 +296,12 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
       try {
         // Use standard fetch for offline background queue processing
         const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
+        const token =
+          sessionData?.session?.access_token ||
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.split("//")[1].split(".")[0];
+
+        if (!token) continue; // Skip if no credentials
 
         const response = await fetch(
           `https://${projectRef}.supabase.co/functions/v1/verify-ticket`,
@@ -305,7 +309,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
               ticket_identifier: id,
@@ -320,7 +324,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
           const result = await response.json();
           // If success, or if it failed because it was ALREADY_USED (which means it was logged previously), remove it from queue.
           if (result.success || result.error_code === "ALREADY_USED") {
-             removeFromOfflineQueue(id);
+            removeFromOfflineQueue(id);
           }
         }
       } catch (err) {
@@ -328,7 +332,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
         console.error("Offline sync failed for", id, err);
       }
     }
-  }, []);
+  }, [removeFromOfflineQueue]);
 
   // Sync offline queue periodically and on mount
   useEffect(() => {
@@ -459,14 +463,19 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
 
       try {
         const result = await retryWithBackoff(async () => {
-          
+
           // Determine the function URL dynamically
           const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
+          const token =
+            sessionData?.session?.access_token ||
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
           const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          
+
           if (!projectUrl) {
             throw new Error("Missing Supabase URL");
+          }
+          if (!token) {
+            throw new Error("Missing Supabase credentials");
           }
 
           // We use fetch with keepalive:true because mobile browsers 
@@ -478,21 +487,21 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
               ticket_identifier: trimmedId,
               verified_by: "staff_portal",
               auto_admit: true,
             }),
-            keepalive: true, 
+            keepalive: true,
           });
 
           if (!response.ok) {
-              const err = await response.json().catch(() => ({}));
-              throw new Error(err.error_message || `HTTP error! status: ${response.status}`);
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error_message || `HTTP error! status: ${response.status}`);
           }
-          
+
           const resultData = await response.json();
           return resultData;
         });
@@ -936,9 +945,8 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
       {/* Flash Feedback Overlay */}
       {flashColor && (
         <div
-          className={`fixed inset-0 pointer-events-none z-50 ${
-            flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
-          }`}
+          className={`fixed inset-0 pointer-events-none z-50 ${flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
+            }`}
           style={{ animation: "flash 0.4s ease-out" }}
         />
       )}
@@ -1004,30 +1012,30 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
                               )}
                             </span>
                           ) : /* Fallback older logic */
-                          ticketData.use_count !== undefined &&
-                            ticketData.total_quantity ? (
-                            <span>
-                              {ticketData.use_count} /{" "}
-                              {ticketData.total_quantity}{" "}
-                              {t(
-                                currentLanguage,
-                                "ticketVerification.quantity.scanned",
-                              )}
-                            </span>
-                          ) : (
-                            <span>
-                              {ticketData.quantity}{" "}
-                              {ticketData.quantity > 1
-                                ? t(
+                            ticketData.use_count !== undefined &&
+                              ticketData.total_quantity ? (
+                              <span>
+                                {ticketData.use_count} /{" "}
+                                {ticketData.total_quantity}{" "}
+                                {t(
+                                  currentLanguage,
+                                  "ticketVerification.quantity.scanned",
+                                )}
+                              </span>
+                            ) : (
+                              <span>
+                                {ticketData.quantity}{" "}
+                                {ticketData.quantity > 1
+                                  ? t(
                                     currentLanguage,
                                     "ticketVerification.quantity.people",
                                   )
-                                : t(
+                                  : t(
                                     currentLanguage,
                                     "ticketVerification.quantity.person",
                                   )}
-                            </span>
-                          )}
+                              </span>
+                            )}
                         </p>
                       </div>
                     </div>
