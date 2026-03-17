@@ -8,9 +8,148 @@ import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { t } from "@/lib/i18n/translations";
 import { ZoomImage } from "./zoom-image";
 
+function useColumnCount() {
+  const [cols, setCols] = useState(2);
+  useEffect(() => {
+    const mq = (n: number) => window.matchMedia(`(min-width: ${n}px)`).matches;
+    const update = () => {
+      if (mq(1280)) setCols(4);
+      else if (mq(1024)) setCols(3);
+      else if (mq(640)) setCols(2);
+      else setCols(1);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return cols;
+}
+
+function SectionGallery({
+  sectionTitle,
+  sectionImages,
+  columnCount,
+  toSectionId,
+  setZoomedState,
+}: {
+  sectionTitle: string;
+  sectionImages: ImageProps[];
+  columnCount: number;
+  toSectionId: (title: string) => string;
+  setZoomedState: (state: {
+    sectionTitle: string;
+    sectionImages: ImageProps[];
+    sectionIndex: number;
+  }) => void;
+}) {
+  const columns = useMemo(() => {
+    const cols: ImageProps[][] = Array.from(
+      { length: columnCount },
+      () => []
+    );
+    sectionImages.forEach((img, i) => cols[i % columnCount].push(img));
+    return cols;
+  }, [sectionImages, columnCount]);
+
+  return (
+    <section
+      id={toSectionId(sectionTitle)}
+      className="mb-24 first:mt-0 mt-4 scroll-mt-24"
+    >
+      <h2 className="text-2xl sm:text-3xl font-medium text-zinc-800 dark:text-white mb-6 tracking-tight">
+        {sectionTitle}
+      </h2>
+      <div
+        className="grid gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+        }}
+      >
+        {columns.map((col, colIndex) => (
+          <div key={colIndex} className="flex flex-col min-w-0">
+            {col.map((img, i) => {
+              const globalIndex = colIndex + i * columnCount;
+              return (
+                <GalleryItem
+                  key={`${sectionTitle}-${img.id}-${globalIndex}`}
+                  img={img}
+                  sectionTitle={sectionTitle}
+                  tags={img.tags}
+                  onClick={() =>
+                    setZoomedState({
+                      sectionTitle,
+                      sectionImages,
+                      sectionIndex: globalIndex,
+                    })
+                  }
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GalleryItem({
+  img,
+  sectionTitle,
+  onClick,
+  tags,
+}: {
+  img: ImageProps;
+  sectionTitle: string;
+  onClick: () => void;
+  tags?: string[];
+}) {
+  const numericWidth = parseInt(img.width, 10);
+  const numericHeight = parseInt(img.height, 10);
+  const hasDimensions = !isNaN(numericWidth) && !isNaN(numericHeight);
+  const aspectStyle = hasDimensions
+    ? { aspectRatio: `${numericWidth} / ${numericHeight}` }
+    : undefined;
+
+  return (
+    <figure
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`
+        relative overflow-hidden rounded-sm bg-muted mb-2 cursor-zoom-in
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
+        after:content after:pointer-events-none after:absolute after:inset-0 after:rounded-sm after:shadow-highlight
+        ${!hasDimensions ? "aspect-square" : ""}
+      `}
+      style={aspectStyle}
+      aria-label={sectionTitle ? `Gallery photo - ${sectionTitle}` : "Gallery photo"}
+    >
+      <Image
+        src={img.url}
+        alt={sectionTitle ? `Gallery photo - ${sectionTitle}` : "Gallery photo"}
+        fill
+        className="object-cover brightness-90 transition will-change-auto hover:brightness-110"
+        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+      />
+      {tags && tags.length > 0 && (
+        <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm shadow-lg z-10">
+          {tags[0]}
+        </div>
+      )}
+    </figure>
+  );
+}
+
 // Renamed component to GalleryClientComponent
 export default function GalleryClientComponent() {
   const { currentLanguage } = useTranslation();
+  const columnCount = useColumnCount();
   const [images, setImages] = useState<ImageProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,67 +319,16 @@ export default function GalleryClientComponent() {
           )}
 
           {/* Sections grouped by gallery title (from Sanity gallery document) */}
-          {imagesByTitle.map(
-            ({ title: sectionTitle, images: sectionImages }) => (
-              <section
-                key={sectionTitle}
-                id={toSectionId(sectionTitle)}
-                className="mb-24 first:mt-0 mt-4 scroll-mt-24"
-              >
-                <h2 className="text-2xl sm:text-3xl font-medium text-zinc-800 dark:text-white mb-6 tracking-tight">
-                  {sectionTitle}
-                </h2>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {sectionImages.map(
-                    ({ id, url, width, height, tags }, index) => {
-                      const numericWidth = parseInt(width, 10);
-                      const numericHeight = parseInt(height, 10);
-                      return (
-                        <div
-                          key={`${sectionTitle}-${id}`}
-                          onClick={() =>
-                            setZoomedState({
-                              sectionTitle,
-                              sectionImages,
-                              sectionIndex: index,
-                            })
-                          }
-                          className={`
-                                        relative 
-                                        mb-5 block w-full cursor-zoom-in
-                                        after:content after:pointer-events-none after:absolute after:inset-0 after:rounded-sm after:shadow-highlight
-                                    `}
-                        >
-                          <Image
-                            alt={
-                              sectionTitle
-                                ? `Gallery photo - ${sectionTitle}`
-                                : "Gallery photo"
-                            }
-                            className="transform rounded-sm brightness-90 transition will-change-auto group-hover:brightness-110"
-                            style={{ transform: "translate3d(0, 0, 0)" }}
-                            src={url}
-                            width={!isNaN(numericWidth) ? numericWidth : 720}
-                            height={!isNaN(numericHeight) ? numericHeight : 480}
-                            sizes="(max-width: 640px) 100vw,
-                                          (max-width: 1280px) 50vw,
-                                          (max-width: 1536px) 33vw,
-                                          25vw"
-                            priority={index < 3}
-                          />
-                          {tags && tags.length > 0 && (
-                            <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm shadow-lg z-10">
-                              {tags[0]}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              </section>
-            ),
-          )}
+          {imagesByTitle.map(({ title: sectionTitle, images: sectionImages }) => (
+            <SectionGallery
+              key={sectionTitle}
+              sectionTitle={sectionTitle}
+              sectionImages={sectionImages}
+              columnCount={columnCount}
+              toSectionId={toSectionId}
+              setZoomedState={setZoomedState}
+            />
+          ))}
         </div>
       </div>
 
