@@ -14,7 +14,18 @@ export default function GalleryClientComponent() {
   const [images, setImages] = useState<ImageProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [zoomedImageId, setZoomedImageId] = useState<number | null>(null); // State for zoomed view entry point
+  const [zoomedState, setZoomedState] = useState<{
+    sectionTitle: string;
+    sectionImages: ImageProps[];
+    sectionIndex: number;
+  } | null>(null);
+
+  // Slug for section anchor (safe for URLs)
+  const toSectionId = (title: string) =>
+    title
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
 
   // Group images by gallery title (from Sanity gallery document title)
   const imagesByTitle = useMemo(() => {
@@ -98,11 +109,6 @@ export default function GalleryClientComponent() {
     fetchImages();
   }, []); // Fetch only once on component mount
 
-  const zoomedIndex =
-    zoomedImageId === null
-      ? -1
-      : images.findIndex((img) => img.id === zoomedImageId);
-
   // --- Render Logic ---
   if (isLoading) {
     // Render only the spinner, Header/Footer are in the parent page
@@ -118,9 +124,8 @@ export default function GalleryClientComponent() {
     );
   }
 
-  // Function to handle closing the modal
   const handleCloseModal = () => {
-    setZoomedImageId(null);
+    setZoomedState(null);
   };
 
   // Return the main gallery content and modal
@@ -137,6 +142,27 @@ export default function GalleryClientComponent() {
               {t(currentLanguage, "galleryPage.description")}
             </div>
           </div>
+
+          {/* Section navigation by title */}
+          {imagesByTitle.length > 1 && (
+            <nav
+              className="flex flex-wrap justify-center gap-2 mt-6"
+              aria-label="Gallery sections"
+            >
+              {imagesByTitle.map(({ title: sectionTitle }) => {
+                const sectionId = toSectionId(sectionTitle);
+                return (
+                  <a
+                    key={sectionId}
+                    href={`#${sectionId}`}
+                    className="px-4 py-2 rounded-md text-sm font-medium bg-zinc-200/80 dark:bg-zinc-800/80 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    {sectionTitle}
+                  </a>
+                );
+              })}
+            </nav>
+          )}
         </div>
 
         {/* Gallery Images Section */}
@@ -156,7 +182,11 @@ export default function GalleryClientComponent() {
           {/* Sections grouped by gallery title (from Sanity gallery document) */}
           {imagesByTitle.map(
             ({ title: sectionTitle, images: sectionImages }) => (
-              <section key={sectionTitle} className="mb-24 first:mt-0 mt-4">
+              <section
+                key={sectionTitle}
+                id={toSectionId(sectionTitle)}
+                className="mb-24 first:mt-0 mt-4 scroll-mt-24"
+              >
                 <h2 className="text-2xl sm:text-3xl font-medium text-zinc-800 dark:text-white mb-6 tracking-tight">
                   {sectionTitle}
                 </h2>
@@ -168,7 +198,13 @@ export default function GalleryClientComponent() {
                       return (
                         <div
                           key={`${sectionTitle}-${id}`}
-                          onClick={() => setZoomedImageId(id)}
+                          onClick={() =>
+                            setZoomedState({
+                              sectionTitle,
+                              sectionImages,
+                              sectionIndex: index,
+                            })
+                          }
                           className={`
                                         relative 
                                         mb-5 block w-full cursor-zoom-in
@@ -208,11 +244,12 @@ export default function GalleryClientComponent() {
         </div>
       </div>
 
-      {/* Zoomed Image Modal / Backdrop with vertical scroll "carousel" */}
-      {zoomedIndex >= 0 && (
+      {/* Zoomed Image Modal – carousel shows only images from the clicked section */}
+      {zoomedState && (
         <ZoomImage
-          images={images}
-          initialIndex={zoomedIndex}
+          images={zoomedState.sectionImages}
+          initialIndex={zoomedState.sectionIndex}
+          sectionTitle={zoomedState.sectionTitle}
           onClose={handleCloseModal}
         />
       )}

@@ -9,10 +9,16 @@ import { useIsMobile } from "@/lib/utils/use-is-mobile";
 type ZoomImageProps = {
   images: ImageProps[];
   initialIndex: number;
+  sectionTitle?: string;
   onClose: () => void;
 };
 
-export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
+export function ZoomImage({
+  images,
+  initialIndex,
+  sectionTitle,
+  onClose,
+}: ZoomImageProps) {
   const isMobile = useIsMobile();
   const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
 
@@ -36,13 +42,16 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 p-4 flex overflow-x-hidden"
+      className="fixed inset-0 z-50 bg-black/90 p-4 flex flex-col overflow-x-hidden"
       onClick={handleClose}
     >
+      {sectionTitle && (
+        <div className="flex-shrink-0 text-center py-2 text-white/80 text-sm font-medium">
+          {sectionTitle}
+        </div>
+      )}
       {/* Scrollable vertical column of images */}
-      <div
-        className="mx-auto max-w-5xl w-full overflow-y-auto"
-      >
+      <div className="mx-auto max-w-5xl w-full flex-1 overflow-y-auto">
         <div className="flex flex-col items-center gap-8 py-4">
           {images.map((img, index) => {
             const numericWidth = parseInt(img.width, 10);
@@ -60,6 +69,12 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
                 ? 1400
                 : 1000;
             const imageSrc = `${baseUrl}?w=${imageSrcWidth}&auto=format&q=90`;
+
+            // Full-size URL for download (original dimensions, cap at 4000px for very large images)
+            const downloadWidth = isValidDimensions
+              ? Math.min(numericWidth, 4000)
+              : 4000;
+            const downloadUrl = `${baseUrl}?w=${downloadWidth}&auto=format&q=95`;
 
             // Use original dimensions when available (no artificial upscaling)
             const baseWidth = isValidDimensions
@@ -111,7 +126,7 @@ export function ZoomImage({ images, initialIndex, onClose }: ZoomImageProps) {
 
                   {/* Download button – inside image, bottom-right */}
                   <a
-                    href={`/api/download-image?url=${encodeURIComponent(img.url)}`}
+                    href={`/api/download-image?url=${encodeURIComponent(downloadUrl)}`}
                     className="absolute bottom-3 right-3 inline-flex items-center justify-center rounded-sm bg-black/80 px-2 py-1 text-white hover:bg-white hover:text-black border border-white/60 hover:border-white transition-colors shadow-md"
                     aria-label="Download image"
                     onClick={(e) => e.stopPropagation()}
