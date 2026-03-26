@@ -72,6 +72,26 @@ interface Purchase {
   is_used: boolean;
   verified_by: string | null;
   scanned_count?: number;
+  is_bundle?: boolean;
+  tickets_per_bundle?: number;
+  admission_total?: number;
+}
+
+function getAdmissionTotal(p: Purchase): number {
+  if (typeof p.admission_total === "number" && p.admission_total > 0) {
+    return p.admission_total;
+  }
+  if (p.is_bundle) {
+    return Math.max(1, p.quantity * (p.tickets_per_bundle ?? 1));
+  }
+  return Math.max(1, p.quantity);
+}
+
+function getScannedCount(p: Purchase): number {
+  if (p.scanned_count !== undefined && p.scanned_count !== null) {
+    return Number(p.scanned_count);
+  }
+  return p.is_used ? getAdmissionTotal(p) : 0;
 }
 
 interface EventInfo {
@@ -676,11 +696,11 @@ export default function AdminClient() {
         );
         const totalPurchases = paidPurchases.length;
         const totalTickets = paidPurchases.reduce(
-          (sum, p) => sum + p.quantity,
+          (sum, p) => sum + getAdmissionTotal(p),
           0,
         );
         const scannedTickets = paidPurchases.reduce(
-          (sum, p) => sum + (p.is_used ? 1 : 0),
+          (sum, p) => sum + getScannedCount(p),
           0,
         );
 
@@ -1120,18 +1140,33 @@ export default function AdminClient() {
                                   {purchase.event_title}
                                 </div>
                                 <div className="text-xs text-gray-400 truncate max-w-[150px]">
-                                  {purchase.ticket_name} × {purchase.quantity}
+                                  {purchase.is_bundle ? (
+                                    <>
+                                      <span className="text-sm text-gray-100 truncate block">
+                                        {purchase.ticket_name}
+                                      </span>
+                                      <span>
+                                        × {purchase.quantity} pack ·{" "}
+                                        {getAdmissionTotal(purchase)} tickets
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {purchase.ticket_name} ×{" "}
+                                      {purchase.quantity}
+                                    </>
+                                  )}
                                 </div>
                               </TableCell>
 
                               {/* Tickets & Amount */}
                               <TableCell className="text-center w-[10%]">
                                 <div className="text-sm font-medium text-gray-100">
-                                  {purchase.scanned_count !== undefined 
-                                    ? <span className="text-green-400">{purchase.scanned_count}</span>
-                                    : purchase.is_used ? purchase.quantity : 0}
+                                  <span className="text-green-400">
+                                    {getScannedCount(purchase)}
+                                  </span>
                                   <span className="text-gray-500 mx-1">/</span>
-                                  {purchase.quantity}
+                                  {getAdmissionTotal(purchase)}
                                 </div>
                                 <div className="text-xs text-gray-400">
                                   {purchase.total_amount}{" "}
@@ -1382,8 +1417,16 @@ export default function AdminClient() {
                       Event: {selectedPurchase.event_title}
                     </div>
                     <div>
-                      Ticket: {selectedPurchase.ticket_name} ×{" "}
-                      {selectedPurchase.quantity}
+                      Ticket: {selectedPurchase.ticket_name}
+                      {selectedPurchase.is_bundle ? (
+                        <span>
+                          {" "}
+                          — {selectedPurchase.quantity} pack (
+                          {getAdmissionTotal(selectedPurchase)} tickets)
+                        </span>
+                      ) : (
+                        <span> × {selectedPurchase.quantity}</span>
+                      )}
                     </div>
                     <div>
                       Amount: {selectedPurchase.total_amount}{" "}

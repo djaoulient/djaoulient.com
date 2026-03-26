@@ -30,7 +30,10 @@ RETURNS TABLE(
     used_at TIMESTAMPTZ,
     is_used BOOLEAN,
     verified_by TEXT,
-    scanned_count BIGINT
+    scanned_count BIGINT,
+    is_bundle BOOLEAN,
+    tickets_per_bundle INTEGER,
+    admission_total INTEGER
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -38,12 +41,12 @@ SET search_path = ''
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        p.id as purchase_id,
+    SELECT
+        p.id AS purchase_id,
         p.customer_id,
-        c.name as customer_name,
-        c.email as customer_email,
-        c.phone as customer_phone,
+        c.name AS customer_name,
+        c.email AS customer_email,
+        c.phone AS customer_phone,
         p.event_id,
         p.event_title,
         p.event_date_text,
@@ -66,17 +69,27 @@ BEGIN
         p.is_used,
         p.verified_by,
         (
-            CASE 
-                WHEN p.individual_tickets_generated THEN 
+            CASE
+                WHEN p.individual_tickets_generated THEN
                     (
-                        SELECT COUNT(*) 
-                        FROM public.individual_tickets it 
+                        SELECT COUNT(*)::BIGINT
+                        FROM public.individual_tickets it
                         WHERE it.purchase_id = p.id AND it.is_used = TRUE
                     )
-                ELSE 
+                ELSE
                     p.use_count::BIGINT
             END
-        ) as scanned_count
+        ) AS scanned_count,
+        COALESCE(p.is_bundle, FALSE) AS is_bundle,
+        COALESCE(NULLIF(p.tickets_per_bundle, 0), 1) AS tickets_per_bundle,
+        (
+            CASE
+                WHEN COALESCE(p.is_bundle, FALSE) THEN
+                    p.quantity * GREATEST(COALESCE(NULLIF(p.tickets_per_bundle, 0), 1), 1)
+                ELSE
+                    GREATEST(p.quantity, 1)
+            END
+        )::INTEGER AS admission_total
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     ORDER BY p.created_at DESC
@@ -115,7 +128,10 @@ RETURNS TABLE(
     used_at TIMESTAMPTZ,
     is_used BOOLEAN,
     verified_by TEXT,
-    scanned_count BIGINT
+    scanned_count BIGINT,
+    is_bundle BOOLEAN,
+    tickets_per_bundle INTEGER,
+    admission_total INTEGER
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -123,12 +139,12 @@ SET search_path = ''
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        p.id as purchase_id,
+    SELECT
+        p.id AS purchase_id,
         p.customer_id,
-        c.name as customer_name,
-        c.email as customer_email,
-        c.phone as customer_phone,
+        c.name AS customer_name,
+        c.email AS customer_email,
+        c.phone AS customer_phone,
         p.event_id,
         p.event_title,
         p.event_date_text,
@@ -151,20 +167,30 @@ BEGIN
         p.is_used,
         p.verified_by,
         (
-            CASE 
-                WHEN p.individual_tickets_generated THEN 
+            CASE
+                WHEN p.individual_tickets_generated THEN
                     (
-                        SELECT COUNT(*) 
-                        FROM public.individual_tickets it 
+                        SELECT COUNT(*)::BIGINT
+                        FROM public.individual_tickets it
                         WHERE it.purchase_id = p.id AND it.is_used = TRUE
                     )
-                ELSE 
+                ELSE
                     p.use_count::BIGINT
             END
-        ) as scanned_count
+        ) AS scanned_count,
+        COALESCE(p.is_bundle, FALSE) AS is_bundle,
+        COALESCE(NULLIF(p.tickets_per_bundle, 0), 1) AS tickets_per_bundle,
+        (
+            CASE
+                WHEN COALESCE(p.is_bundle, FALSE) THEN
+                    p.quantity * GREATEST(COALESCE(NULLIF(p.tickets_per_bundle, 0), 1), 1)
+                ELSE
+                    GREATEST(p.quantity, 1)
+            END
+        )::INTEGER AS admission_total
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
-    WHERE 
+    WHERE
         LOWER(c.name) LIKE LOWER('%' || p_search_query || '%') OR
         LOWER(c.email) LIKE LOWER('%' || p_search_query || '%') OR
         LOWER(p.event_title) LIKE LOWER('%' || p_search_query || '%') OR
@@ -319,10 +345,10 @@ GRANT EXECUTE ON FUNCTION public.export_admin_purchases_csv() TO service_role;
 
 -- Comments
 COMMENT ON FUNCTION public.get_admin_purchases()
-IS 'Retrieves all purchases for admin panel with customer information';
+IS 'Admin purchases list with customer info; admission_total is quantity×tickets_per_bundle for bundles.';
 
 COMMENT ON FUNCTION public.search_admin_purchases(TEXT)
-IS 'Searches purchases by customer name, email, event title, or purchase ID';
+IS 'Search admin purchases by customer, event, purchase id, or ticket id; includes admission_total for packs.';
 
 COMMENT ON FUNCTION public.update_customer_for_resend(UUID, TEXT, TEXT, TEXT)
 IS 'Updates customer information when resending emails. Handles duplicate emails by merging customers with matching details.';
