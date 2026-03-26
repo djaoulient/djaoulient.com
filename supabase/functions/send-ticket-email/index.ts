@@ -214,10 +214,10 @@ Deno.serve(async (req: Request) => {
         actualTicketQuantity > 1);
 
     if (!useIndividualTickets) {
-      const { data: hasIndividuals, error: hasIndividualsErr } = await supabase.rpc(
-        "purchase_has_individual_tickets",
-        { p_purchase_id: purchaseIdFromRequest },
-      );
+      const { data: hasIndividuals, error: hasIndividualsErr } =
+        await supabase.rpc("purchase_has_individual_tickets", {
+          p_purchase_id: purchaseIdFromRequest,
+        });
       if (!hasIndividualsErr && hasIndividuals === true) {
         useIndividualTickets = true;
       }

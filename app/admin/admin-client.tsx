@@ -198,7 +198,9 @@ export default function AdminClient() {
     for (const p of purchases) {
       if (p.status === "paid") {
         s.add(
-          `${String(p.customer_email ?? "").trim().toLowerCase()}::${String(p.event_id ?? "")}`,
+          `${String(p.customer_email ?? "")
+            .trim()
+            .toLowerCase()}::${String(p.event_id ?? "")}`,
         );
       }
     }
@@ -208,7 +210,9 @@ export default function AdminClient() {
   const isTrueAbandonment = useCallback(
     (purchase: Purchase) => {
       if (purchase.status !== "payment_failed") return false;
-      const key = `${String(purchase.customer_email ?? "").trim().toLowerCase()}::${String(purchase.event_id ?? "")}`;
+      const key = `${String(purchase.customer_email ?? "")
+        .trim()
+        .toLowerCase()}::${String(purchase.event_id ?? "")}`;
       return !paidEmailEventKeys.has(key);
     },
     [paidEmailEventKeys],
@@ -606,7 +610,9 @@ export default function AdminClient() {
         toast.success("Recovery email sent successfully!");
       } else {
         toast.success(
-          isFirstTime ? "Email sent successfully!" : "Email resent successfully!",
+          isFirstTime
+            ? "Email sent successfully!"
+            : "Email resent successfully!",
         );
       }
       setIsEmailDialogOpen(false);
@@ -826,26 +832,26 @@ export default function AdminClient() {
   // Calculate current event stats from PAID purchases only (always show real business metrics)
   const currentEventStats = selectedEvent
     ? (() => {
-      const paidPurchases = purchases.filter(
-        (p) => p.event_id === selectedEvent && p.status === "paid",
-      );
-      const totalPurchases = paidPurchases.length;
-      const totalTickets = paidPurchases.reduce(
-        (sum, p) => sum + getAdmissionTotal(p),
-        0,
-      );
-      const scannedTickets = paidPurchases.reduce(
-        (sum, p) => sum + getScannedCount(p),
-        0,
-      );
+        const paidPurchases = purchases.filter(
+          (p) => p.event_id === selectedEvent && p.status === "paid",
+        );
+        const totalPurchases = paidPurchases.length;
+        const totalTickets = paidPurchases.reduce(
+          (sum, p) => sum + getAdmissionTotal(p),
+          0,
+        );
+        const scannedTickets = paidPurchases.reduce(
+          (sum, p) => sum + getScannedCount(p),
+          0,
+        );
 
-      return {
-        total_purchases: totalPurchases,
-        total_tickets: totalTickets,
-        scanned_tickets: scannedTickets,
-        event_id: selectedEvent,
-      };
-    })()
+        return {
+          total_purchases: totalPurchases,
+          total_tickets: totalTickets,
+          scanned_tickets: scannedTickets,
+          event_id: selectedEvent,
+        };
+      })()
     : null;
 
   if (!isAuthenticated) {
@@ -1013,10 +1019,11 @@ export default function AdminClient() {
               variant="ghost"
               size="sm"
               onClick={() => setActiveTab("purchases")}
-              className={`rounded-sm text-xs sm:text-sm ${activeTab === "purchases"
+              className={`rounded-sm text-xs sm:text-sm ${
+                activeTab === "purchases"
                   ? "bg-slate-700 text-white hover:bg-slate-600"
                   : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                }`}
+              }`}
             >
               Purchases
             </Button>
@@ -1024,10 +1031,11 @@ export default function AdminClient() {
               variant="ghost"
               size="sm"
               onClick={() => setActiveTab("scans")}
-              className={`rounded-sm text-xs sm:text-sm ${activeTab === "scans"
+              className={`rounded-sm text-xs sm:text-sm ${
+                activeTab === "scans"
                   ? "bg-slate-700 text-white hover:bg-slate-600"
                   : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                }`}
+              }`}
             >
               Logs
             </Button>
@@ -1064,10 +1072,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setStatusFilter("paid")}
-                        className={`rounded-sm text-xs sm:text-sm ${statusFilter === "paid"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          statusFilter === "paid"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Paid Only
@@ -1076,10 +1085,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setStatusFilter("all")}
-                        className={`rounded-sm text-xs sm:text-sm ${statusFilter === "all"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          statusFilter === "all"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         All Status
                       </Button>
@@ -1087,10 +1097,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setStatusFilter("pending")}
-                        className={`rounded-sm text-xs sm:text-sm ${statusFilter === "pending"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          statusFilter === "pending"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Pending
@@ -1099,10 +1110,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setStatusFilter("failed")}
-                        className={`rounded-sm text-xs sm:text-sm ${statusFilter === "failed"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          statusFilter === "failed"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Failed
@@ -1115,10 +1127,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setAdmissionFilter("all")}
-                        className={`rounded-sm text-xs sm:text-sm ${admissionFilter === "all"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          admissionFilter === "all"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         All Admission
                       </Button>
@@ -1126,10 +1139,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setAdmissionFilter("scanned")}
-                        className={`rounded-sm text-xs sm:text-sm ${admissionFilter === "scanned"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          admissionFilter === "scanned"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         <QrCode className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Scanned
@@ -1138,10 +1152,11 @@ export default function AdminClient() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setAdmissionFilter("unscanned")}
-                        className={`rounded-sm text-xs sm:text-sm ${admissionFilter === "unscanned"
+                        className={`rounded-sm text-xs sm:text-sm ${
+                          admissionFilter === "unscanned"
                             ? "bg-slate-700 text-white hover:bg-slate-600"
                             : "bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                          }`}
+                        }`}
                       >
                         <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Not Scanned
@@ -1171,10 +1186,7 @@ export default function AdminClient() {
                           </Button>
                         </div>
                         <div className="w-full shrink-0 sm:w-[min(100%,20rem)]">
-                          <Label
-                            htmlFor="offering-filter"
-                            className="sr-only"
-                          >
+                          <Label htmlFor="offering-filter" className="sr-only">
                             Ticket or pack
                           </Label>
                           <Select
@@ -1189,9 +1201,7 @@ export default function AdminClient() {
                               <SelectValue placeholder="Item" />
                             </SelectTrigger>
                             <SelectContent className="max-h-[min(24rem,70vh)] border-slate-700 bg-slate-950 text-gray-100">
-                              <SelectItem value="all">
-                                All items
-                              </SelectItem>
+                              <SelectItem value="all">All items</SelectItem>
                               {offeringOptions.map(({ value, label }) => (
                                 <SelectItem key={value} value={value}>
                                   <span className="line-clamp-2 text-left">
@@ -1266,8 +1276,9 @@ export default function AdminClient() {
                             </TableHead>
                           )}
                           <TableHead
-                            className={`text-left hidden sm:table-cell ${selectedEvent ? "w-[22%]" : "w-[11%]"
-                              }`}
+                            className={`text-left hidden sm:table-cell ${
+                              selectedEvent ? "w-[22%]" : "w-[11%]"
+                            }`}
                           >
                             Item
                           </TableHead>
@@ -1320,7 +1331,8 @@ export default function AdminClient() {
                                           <span>
                                             {" "}
                                             × {purchase.quantity} pack ·{" "}
-                                            {getAdmissionTotal(purchase)} tickets
+                                            {getAdmissionTotal(purchase)}{" "}
+                                            tickets
                                           </span>
                                         </>
                                       ) : (
@@ -1346,12 +1358,16 @@ export default function AdminClient() {
                               )}
 
                               <TableCell
-                                className={`hidden sm:table-cell ${selectedEvent ? "w-[22%]" : "w-[11%]"
-                                  }`}
+                                className={`hidden sm:table-cell ${
+                                  selectedEvent ? "w-[22%]" : "w-[11%]"
+                                }`}
                               >
                                 <div
-                                  className={`text-xs text-gray-400 truncate ${selectedEvent ? "max-w-[240px]" : "max-w-[140px]"
-                                    }`}
+                                  className={`text-xs text-gray-400 truncate ${
+                                    selectedEvent
+                                      ? "max-w-[240px]"
+                                      : "max-w-[140px]"
+                                  }`}
                                 >
                                   {purchase.is_bundle ? (
                                     <>
@@ -1431,9 +1447,13 @@ export default function AdminClient() {
                               <TableCell className="text-center w-[14%]">
                                 <div className="flex flex-col items-center gap-1">
                                   {canSendEmail(purchase) ? (
-                                    getStatusBadge(purchase.email_dispatch_status)
+                                    getStatusBadge(
+                                      purchase.email_dispatch_status,
+                                    )
                                   ) : (
-                                    <span className="text-xs text-gray-500">—</span>
+                                    <span className="text-xs text-gray-500">
+                                      —
+                                    </span>
                                   )}
                                   {purchase.pdf_ticket_sent_at && (
                                     <span className="text-xs text-gray-500">
@@ -1451,10 +1471,11 @@ export default function AdminClient() {
                                   <Button
                                     size="sm"
                                     onClick={() => openEmailDialog(purchase)}
-                                    className={`rounded-sm text-white text-xs ${recoveryRow
+                                    className={`rounded-sm text-white text-xs ${
+                                      recoveryRow
                                         ? "bg-amber-600 hover:bg-amber-700"
                                         : "bg-blue-600 hover:bg-blue-700"
-                                      }`}
+                                    }`}
                                   >
                                     <EmailIcon className="h-3 w-3 mr-1" />
                                     <span className="hidden sm:inline ml-1">
@@ -1465,7 +1486,9 @@ export default function AdminClient() {
                                     </span>
                                   </Button>
                                 ) : (
-                                  <span className="text-xs text-gray-500">—</span>
+                                  <span className="text-xs text-gray-500">
+                                    —
+                                  </span>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -1597,7 +1620,7 @@ export default function AdminClient() {
                     const recovery = isTrueAbandonment(selectedPurchase);
                     const first =
                       selectedPurchase.email_dispatch_status ===
-                      "NOT_INITIATED" ||
+                        "NOT_INITIATED" ||
                       selectedPurchase.email_dispatch_attempts === 0;
                     if (recovery) {
                       return "Send Recovery Email";
@@ -1714,7 +1737,7 @@ export default function AdminClient() {
                       <>
                         {selectedPurchase.email_dispatch_status ===
                           "NOT_INITIATED" ||
-                          selectedPurchase.email_dispatch_attempts === 0 ? (
+                        selectedPurchase.email_dispatch_attempts === 0 ? (
                           <>
                             <Send className="h-4 w-4 mr-2" />
                             Send Email

@@ -110,9 +110,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: ticketData, error: verifyError } = await supabase.rpc(
       "verify_ticket",
-      { 
+      {
         p_ticket_identifier: trimmedId,
-        p_scanner_email: verified_by || "edge_function_unknown"
+        p_scanner_email: verified_by || "edge_function_unknown",
       },
     );
 
@@ -153,8 +153,7 @@ Deno.serve(async (req: Request) => {
     // Purchase-level counts from DB; per-QR scans still require !ticket.is_used when applicable.
     const totalQty = Math.max(1, Number(ticket.total_quantity) || 1);
     const useCount = Math.max(0, Number(ticket.use_count) || 0);
-    const canBeAdmitted =
-      !ticket.is_used && useCount < totalQty;
+    const canBeAdmitted = !ticket.is_used && useCount < totalQty;
     const remainingTickets = Math.max(0, totalQty - useCount);
 
     const ticketWithRemaining = {
@@ -170,11 +169,13 @@ Deno.serve(async (req: Request) => {
       if (ticket.used_at) {
         const usedAtTime = new Date(ticket.used_at).getTime();
         const nowTime = Date.now();
-        const isRecentlyUsed = (nowTime - usedAtTime) < 15000; // 15 seconds
+        const isRecentlyUsed = nowTime - usedAtTime < 15000; // 15 seconds
 
         if (isRecentlyUsed) {
-          console.log(`Ticket was used very recently (${nowTime - usedAtTime}ms ago), likely a prefetch or retry. Treated as success.`);
-          
+          console.log(
+            `Ticket was used very recently (${nowTime - usedAtTime}ms ago), likely a prefetch or retry. Treated as success.`,
+          );
+
           const fakedTicket = {
             ...ticketWithRemaining,
             remaining_tickets: Math.max(0, totalQty - useCount),
@@ -185,7 +186,7 @@ Deno.serve(async (req: Request) => {
               success: true,
               ticket_data: fakedTicket,
               admitted: true,
-              warning: "RECENT_DUPLICATE_TREATED_AS_SUCCESS"
+              warning: "RECENT_DUPLICATE_TREATED_AS_SUCCESS",
             }),
             {
               headers: { ...corsHeaders, "Content-Type": "application/json" },

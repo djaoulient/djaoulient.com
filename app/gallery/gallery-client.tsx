@@ -43,10 +43,7 @@ function SectionGallery({
   }) => void;
 }) {
   const columns = useMemo(() => {
-    const cols: ImageProps[][] = Array.from(
-      { length: columnCount },
-      () => []
-    );
+    const cols: ImageProps[][] = Array.from({ length: columnCount }, () => []);
     sectionImages.forEach((img, i) => cols[i % columnCount].push(img));
     return cols;
   }, [sectionImages, columnCount]);
@@ -128,7 +125,9 @@ function GalleryItem({
         ${!hasDimensions ? "aspect-square" : ""}
       `}
       style={aspectStyle}
-      aria-label={sectionTitle ? `Gallery photo - ${sectionTitle}` : "Gallery photo"}
+      aria-label={
+        sectionTitle ? `Gallery photo - ${sectionTitle}` : "Gallery photo"
+      }
     >
       <Image
         src={img.url}
@@ -319,16 +318,18 @@ export default function GalleryClientComponent() {
           )}
 
           {/* Sections grouped by gallery title (from Sanity gallery document) */}
-          {imagesByTitle.map(({ title: sectionTitle, images: sectionImages }) => (
-            <SectionGallery
-              key={sectionTitle}
-              sectionTitle={sectionTitle}
-              sectionImages={sectionImages}
-              columnCount={columnCount}
-              toSectionId={toSectionId}
-              setZoomedState={setZoomedState}
-            />
-          ))}
+          {imagesByTitle.map(
+            ({ title: sectionTitle, images: sectionImages }) => (
+              <SectionGallery
+                key={sectionTitle}
+                sectionTitle={sectionTitle}
+                sectionImages={sectionImages}
+                columnCount={columnCount}
+                toSectionId={toSectionId}
+                setZoomedState={setZoomedState}
+              />
+            ),
+          )}
         </div>
       </div>
 

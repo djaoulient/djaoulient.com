@@ -311,7 +311,7 @@ export default function PurchaseFormModal({
         console.error("Supabase function error:", functionError);
         setError(
           functionError.message ||
-          t(currentLanguage, "purchaseModal.errors.functionError"),
+            t(currentLanguage, "purchaseModal.errors.functionError"),
         );
         setIsLoading(false);
         return;
@@ -324,7 +324,7 @@ export default function PurchaseFormModal({
         console.error("Lomi checkout URL not found in response:", data);
         setError(
           data.error ||
-          t(currentLanguage, "purchaseModal.errors.lomiUrlMissing"),
+            t(currentLanguage, "purchaseModal.errors.lomiUrlMissing"),
         );
       }
     } catch (e: unknown) {
@@ -399,23 +399,24 @@ export default function PurchaseFormModal({
               key="purchase-panel"
               {...(isMobile
                 ? {
-                  initial: { y: "100%" },
-                  animate: { y: 0 },
-                  exit: { y: "100%" },
-                }
+                    initial: { y: "100%" },
+                    animate: { y: 0 },
+                    exit: { y: "100%" },
+                  }
                 : {
-                  initial: { x: "100%" },
-                  animate: { x: 0 },
-                  exit: { x: "100%" },
-                })}
+                    initial: { x: "100%" },
+                    animate: { x: 0 },
+                    exit: { x: "100%" },
+                  })}
               transition={{
                 duration: ANIMATION_DURATION_MS / 1000,
                 ease: "easeInOut",
               }}
-              className={`fixed z-[70] will-change-transform pointer-events-auto ${isMobile
-                ? "inset-x-0 bottom-0 flex w-full"
-                : "top-0 bottom-0 right-0 flex w-full md:w-[500px]"
-                }`}
+              className={`fixed z-[70] will-change-transform pointer-events-auto ${
+                isMobile
+                  ? "inset-x-0 bottom-0 flex w-full"
+                  : "top-0 bottom-0 right-0 flex w-full md:w-[500px]"
+              }`}
               style={
                 isMobile
                   ? { position: "fixed", left: 0, right: 0, bottom: 0 }

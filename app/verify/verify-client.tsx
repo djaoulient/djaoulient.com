@@ -162,9 +162,9 @@ const storage = {
       localStorage.setItem(key, data);
 
       // Also set document cookie for cross-app/tab persistence
-      if (typeof document !== 'undefined') {
+      if (typeof document !== "undefined") {
         const expires = new Date();
-        expires.setTime(expires.getTime() + (8 * 60 * 60 * 1000)); // 8 hours
+        expires.setTime(expires.getTime() + 8 * 60 * 60 * 1000); // 8 hours
         document.cookie = `${key}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;max-age=${8 * 60 * 60};SameSite=Lax`;
       }
       return true;
@@ -184,8 +184,10 @@ const storage = {
   get: (key: string): unknown => {
     // Try cookie first as it's more reliable across sub-environments (like native camera to Safari transitions)
     try {
-      if (typeof document !== 'undefined') {
-        const match = document.cookie.match(new RegExp('(^| )' + key + '=([^;]+)'));
+      if (typeof document !== "undefined") {
+        const match = document.cookie.match(
+          new RegExp("(^| )" + key + "=([^;]+)"),
+        );
         if (match && match[2]) {
           return JSON.parse(decodeURIComponent(match[2]));
         }
@@ -221,7 +223,7 @@ const storage = {
   },
   remove: (key: string): void => {
     try {
-      if (typeof document !== 'undefined') {
+      if (typeof document !== "undefined") {
         document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
       }
     } catch {
@@ -251,7 +253,6 @@ interface VerifyClientProps {
   ticketId?: string;
 }
 
-
 export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   const searchParams = useSearchParams();
   const ticketId =
@@ -270,7 +271,9 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   // Guard: only fire one verification request per unique ticketId
   const verifiedTicketRef = useRef<string | null>(null);
   const isVerifiedRef = useRef(false);
-  const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(async () => { });
+  const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(
+    async () => {},
+  );
   /** Bumps when `ticketId` changes so slow responses cannot overwrite UI (mobile / rapid scans). */
   const verifyGenerationRef = useRef(0);
 
@@ -281,7 +284,11 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
         const cached = storage.get(PIN_CACHE_KEY);
         if (cached) {
           // Check if it's the newer object format with timestamp
-          if (typeof cached === 'object' && cached !== null && 'timestamp' in cached) {
+          if (
+            typeof cached === "object" &&
+            cached !== null &&
+            "timestamp" in cached
+          ) {
             const cacheObj = cached as { timestamp: number };
             const now = Date.now();
 
@@ -295,7 +302,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
             }
           }
           // Handle legacy format (raw PIN string/number saved before update)
-          else if (typeof cached === 'string' || typeof cached === 'number') {
+          else if (typeof cached === "string" || typeof cached === "number") {
             // Upgrade to new format
             storage.set(PIN_CACHE_KEY, { timestamp: Date.now() });
             setIsVerified(true);
@@ -392,16 +399,14 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
 
       try {
         // Single direct call - edge function handles deduplication server-side
-        const { data: response, error: edgeError } = await supabase.functions.invoke(
-          'verify-ticket',
-          {
+        const { data: response, error: edgeError } =
+          await supabase.functions.invoke("verify-ticket", {
             body: {
               ticket_identifier: trimmedId,
-              verified_by: 'staff',
+              verified_by: "staff",
               auto_admit: true,
-            }
-          }
-        );
+            },
+          });
 
         if (isStale()) return;
 
@@ -409,8 +414,8 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
           throw new Error(`Edge function error: ${edgeError.message}`);
         }
 
-        if (!response || typeof response !== 'object') {
-          throw new Error('Invalid response from verification service');
+        if (!response || typeof response !== "object") {
+          throw new Error("Invalid response from verification service");
         }
 
         const result = response as {
@@ -426,24 +431,24 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
         }
 
         if (!result.success) {
-          const code = result.error_code || 'UNKNOWN_ERROR';
-          const msg = result.error_message || 'Verification failed';
+          const code = result.error_code || "UNKNOWN_ERROR";
+          const msg = result.error_message || "Verification failed";
           const friendlyMessage = getUserFriendlyError(code, msg);
           setError(friendlyMessage);
           setErrorCode(code);
           playErrorSound();
-          setFlashColor('red');
+          setFlashColor("red");
           setTimeout(() => setFlashColor(null), 500);
           return;
         }
 
         if (result.success && !result.admitted && result.error_code) {
           const code = result.error_code;
-          const msg = result.error_message || 'Admission failed';
+          const msg = result.error_message || "Admission failed";
           const friendlyMessage = getUserFriendlyError(code, msg);
           setError(friendlyMessage);
           setErrorCode(code);
-          setFlashColor('red');
+          setFlashColor("red");
           setTimeout(() => setFlashColor(null), 500);
           return;
         }
@@ -453,19 +458,20 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
           setError(null);
           setErrorCode(null);
           playSuccessSound();
-          setFlashColor('green');
+          setFlashColor("green");
           setTimeout(() => setFlashColor(null), 300);
         }
       } catch (err) {
         if (isStale()) return;
-        console.error('Verification error:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Verification failed';
+        console.error("Verification error:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : "Verification failed";
         const { code, message } = parseErrorMessage(errorMessage);
         const friendlyMessage = getUserFriendlyError(code, message);
         setError(friendlyMessage);
         setErrorCode(code);
         playErrorSound();
-        setFlashColor('red');
+        setFlashColor("red");
         setTimeout(() => setFlashColor(null), 500);
       } finally {
         if (!isStale()) {
@@ -473,7 +479,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
         }
       }
     },
-    [getUserFriendlyError]
+    [getUserFriendlyError],
   );
 
   useEffect(() => {
@@ -833,8 +839,9 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
       {/* Flash Feedback Overlay */}
       {flashColor && (
         <div
-          className={`fixed inset-0 pointer-events-none z-50 ${flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
-            }`}
+          className={`fixed inset-0 pointer-events-none z-50 ${
+            flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
+          }`}
           style={{ animation: "flash 0.4s ease-out" }}
         />
       )}
@@ -864,7 +871,9 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
               <CardContent className="px-8 py-12">
                 <div className="flex flex-col items-center text-center space-y-8">
                   {status.icon}
-                  <h2 className={`text-lg font-medium tracking-tight ${status.textColor}`}>
+                  <h2
+                    className={`text-lg font-medium tracking-tight ${status.textColor}`}
+                  >
                     {status.statusText}
                   </h2>
                   {ticketData && (
@@ -881,13 +890,16 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
                             currentLanguage,
                             "ticketVerification.quantity.scannedRemaining",
                             {
-                              scannedCount: ticketData.use_count != null
-                                ? ticketData.use_count
-                                : (1 - (ticketData.remaining_tickets || 0)),
-                              remainingCount: ticketData.remaining_tickets != null
-                                ? ticketData.remaining_tickets
-                                : ((ticketData.total_quantity || 1) - (ticketData.use_count || 0)),
-                            }
+                              scannedCount:
+                                ticketData.use_count != null
+                                  ? ticketData.use_count
+                                  : 1 - (ticketData.remaining_tickets || 0),
+                              remainingCount:
+                                ticketData.remaining_tickets != null
+                                  ? ticketData.remaining_tickets
+                                  : (ticketData.total_quantity || 1) -
+                                    (ticketData.use_count || 0),
+                            },
                           )}
                         </p>
                       </div>
@@ -895,10 +907,11 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
                   )}
                   {error && (
                     <p
-                      className={`text-sm ${errorCode === "ALREADY_USED"
-                        ? "text-muted-foreground"
-                        : "text-destructive"
-                        }`}
+                      className={`text-sm ${
+                        errorCode === "ALREADY_USED"
+                          ? "text-muted-foreground"
+                          : "text-destructive"
+                      }`}
                     >
                       {error}
                     </p>

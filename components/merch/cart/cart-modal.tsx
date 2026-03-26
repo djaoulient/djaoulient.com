@@ -94,10 +94,10 @@ const CartItems = ({
                 </p>
                 <p className="text-foreground">
                   {cart.cost.shippingAmount &&
-                    Number(cart.cost.shippingAmount.amount) > 0
+                  Number(cart.cost.shippingAmount.amount) > 0
                     ? `${Number(cart.cost.shippingAmount.amount).toLocaleString(
-                      "fr-FR",
-                    )} F CFA`
+                        "fr-FR",
+                      )} F CFA`
                     : t(currentLanguage, "cartModal.freeShipping")}
                 </p>
               </div>
@@ -432,15 +432,15 @@ export default function CartModal() {
                   key="cart-panel"
                   {...(isMobile
                     ? {
-                      initial: { y: "100%" },
-                      animate: { y: 0 },
-                      exit: { y: "100%" },
-                    }
+                        initial: { y: "100%" },
+                        animate: { y: 0 },
+                        exit: { y: "100%" },
+                      }
                     : {
-                      initial: { x: "100%" },
-                      animate: { x: 0 },
-                      exit: { x: "100%" },
-                    })}
+                        initial: { x: "100%" },
+                        animate: { x: 0 },
+                        exit: { x: "100%" },
+                      })}
                   transition={{ duration: 0.3, ease: "easeInOut" }}
                   className={cn(
                     "fixed z-70 will-change-transform flex w-full",
