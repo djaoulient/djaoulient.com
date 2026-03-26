@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
 import {
   Loader2,
   CheckCircle,
@@ -124,7 +123,7 @@ const storage = {
     try {
       // Try localStorage first (persists across browser sessions)
       localStorage.setItem(key, data);
-      
+
       // Also set document cookie for cross-app/tab persistence
       if (typeof document !== 'undefined') {
         const expires = new Date();
@@ -240,7 +239,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
           if (typeof cached === 'object' && cached !== null && 'timestamp' in cached) {
             const cacheObj = cached as { timestamp: number };
             const now = Date.now();
-            
+
             // Check if cached PIN is still valid (within duration)
             if (now - cacheObj.timestamp < PIN_CACHE_DURATION) {
               setIsVerified(true);
@@ -249,7 +248,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
               // Clear expired cache
               storage.remove(PIN_CACHE_KEY);
             }
-          } 
+          }
           // Handle legacy format (raw PIN string/number saved before update)
           else if (typeof cached === 'string' || typeof cached === 'number') {
             // Upgrade to new format
@@ -415,7 +414,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
         setIsLoading(false);
       }
     },
-    [currentLanguage, getUserFriendlyError]
+    [getUserFriendlyError]
   );
 
   const handlePinSubmit = async (e: React.FormEvent) => {
@@ -496,6 +495,21 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
         badgeVariant: "destructive" as const,
         badgeText: t(currentLanguage, "ticketVerification.badges.invalid"),
         statusText: t(currentLanguage, "ticketVerification.status.invalid"),
+      };
+    }
+
+    // NEW: If we just successfully admitted this ticket, it is ALWAYS a valid scan (green)!
+    if (wasJustAdmitted) {
+      return {
+        bgColor: "bg-green-50/30 dark:bg-green-900/20",
+        borderColor: "border-green-300 dark:border-green-700",
+        textColor: "text-green-800 dark:text-green-200",
+        icon: (
+          <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+        ),
+        badgeVariant: "default" as const,
+        badgeText: t(currentLanguage, "ticketVerification.badges.valid"),
+        statusText: t(currentLanguage, "ticketVerification.status.valid"),
       };
     }
 
@@ -781,33 +795,32 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
                         <p className="text-sm text-muted-foreground">
                           {ticketData.remaining_tickets !== undefined
                             ? t(
-                                currentLanguage,
-                                "ticketVerification.quantity.remainingOfTotal",
-                                {
-                                  remaining: ticketData.remaining_tickets,
-                                  total: ticketData.total_quantity || 1,
-                                },
-                              )
-                            : ticketData.use_count !== undefined && ticketData.total_quantity !== undefined
+                              currentLanguage,
+                              "ticketVerification.quantity.remainingOfTotal",
+                              {
+                                remaining: ticketData.remaining_tickets,
+                                total: ticketData.use_count == null ? 1 : (ticketData.total_quantity || 1),
+                              },
+                            )
+                            : ticketData.use_count != null && ticketData.total_quantity != null
                               ? t(
+                                currentLanguage,
+                                "ticketVerification.quantity.scannedRemaining",
+                                {
+                                  scannedCount: ticketData.use_count,
+                                  remainingCount: ticketData.total_quantity - ticketData.use_count,
+                                }
+                              )
+                              : `${ticketData.quantity} ${ticketData.quantity > 1
+                                ? t(
                                   currentLanguage,
-                                  "ticketVerification.quantity.scannedRemaining",
-                                  {
-                                    scannedCount: ticketData.use_count,
-                                    remainingCount: ticketData.total_quantity - ticketData.use_count,
-                                  }
+                                  "ticketVerification.quantity.people",
                                 )
-                              : `${ticketData.quantity} ${
-                                  ticketData.quantity > 1
-                                    ? t(
-                                        currentLanguage,
-                                        "ticketVerification.quantity.people",
-                                      )
-                                    : t(
-                                        currentLanguage,
-                                        "ticketVerification.quantity.person",
-                                      )
-                                }`}
+                                : t(
+                                  currentLanguage,
+                                  "ticketVerification.quantity.person",
+                                )
+                              }`}
                         </p>
                       </div>
                     </div>
@@ -817,7 +830,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
                       className={`text-sm ${errorCode === "ALREADY_USED"
                         ? "text-muted-foreground"
                         : "text-destructive"
-                      }`}
+                        }`}
                     >
                       {error}
                     </p>
