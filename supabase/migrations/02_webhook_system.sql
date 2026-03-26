@@ -14,12 +14,11 @@ SET search_path = ''
 AS $$
 DECLARE
     v_current_status TEXT;
-    v_webhook_event_id TEXT;
+    v_checkout_session TEXT;
 BEGIN
-    -- Generate webhook event ID for idempotency check
-    v_webhook_event_id := p_payment_status || ':' || COALESCE(p_lomi_payment_id, p_lomi_checkout_session_id, 'unknown');
+    -- Empty string must not be stored: lomi_session_id is UNIQUE and '' would collide across purchases.
+    v_checkout_session := NULLIF(p_lomi_checkout_session_id, '');
 
-    -- Check if this webhook event has already been processed
     SELECT status INTO v_current_status
     FROM public.purchases
     WHERE id = p_purchase_id;
@@ -36,14 +35,13 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Only update if this is a new status or more significant status change
     UPDATE public.purchases
     SET
-        status = p_payment_status, -- Update status based on webhook (e.g., 'paid', 'payment_failed')
-        lomi_session_id = COALESCE(p_lomi_checkout_session_id, lomi_session_id), -- Store or update Lomi checkout session ID
-        total_amount = p_amount_paid, -- Update with amount confirmed by Lomi
-        currency_code = p_currency_paid, -- Update with currency confirmed by Lomi
-        payment_processor_details = p_lomi_event_payload, -- Store the full Lomi webhook payload for auditing/reference
+        status = p_payment_status,
+        lomi_session_id = COALESCE(v_checkout_session, lomi_session_id),
+        total_amount = p_amount_paid,
+        currency_code = p_currency_paid,
+        payment_processor_details = p_lomi_event_payload,
         updated_at = NOW()
     WHERE id = p_purchase_id;
 
@@ -52,7 +50,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.record_event_lomi_payment(UUID, TEXT, TEXT, TEXT, JSONB, NUMERIC, TEXT)
-IS 'Records the outcome of a Lomi payment for an event purchase, updating status and storing Lomi transaction details. To be called by the Lomi webhook handler.';
+IS 'Records Lomi payment outcome for an event purchase. Blank checkout session id is ignored so UNIQUE(lomi_session_id) is not violated. Called by the Lomi webhook handler.';
 
 -- Grant execute permission to the service_role (used by Supabase functions/backend calls)
 GRANT EXECUTE ON FUNCTION public.record_event_lomi_payment(UUID, TEXT, TEXT, TEXT, JSONB, NUMERIC, TEXT) TO service_role;

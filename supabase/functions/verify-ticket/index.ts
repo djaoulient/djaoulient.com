@@ -32,6 +32,42 @@ if (!supabaseServiceRoleKey || supabaseServiceRoleKey.trim() === "") {
   throw new Error("SUPABASE_SERVICE_ROLE_KEY environment variable is required");
 }
 
+/** QR payloads may be a full /verify?id= URL, quoted id, or legacy formats from scanners. */
+function normalizeTicketIdentifier(raw: string): string {
+  let s = raw.trim();
+  if (!s) return s;
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  try {
+    if (/^https?:\/\//i.test(s) && /verify/i.test(s)) {
+      const u = new URL(s);
+      const id = u.searchParams.get("id");
+      if (id) {
+        try {
+          return decodeURIComponent(id).trim();
+        } catch {
+          return id.trim();
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  const idFromQuery = s.match(/[?&]id=([^&]+)/i);
+  if (idFromQuery?.[1]) {
+    try {
+      return decodeURIComponent(idFromQuery[1]).trim();
+    } catch {
+      return idFromQuery[1].trim();
+    }
+  }
+  return s;
+}
+
 // The edge function's single-threaded nature prevents race conditions
 // No additional locking mechanism needed
 
@@ -67,7 +103,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const trimmedId = ticket_identifier.trim();
+    const trimmedId = normalizeTicketIdentifier(ticket_identifier);
 
     // Step 1: Verify the ticket (atomic operation)
     console.log(`Verifying ticket: ${trimmedId}`);

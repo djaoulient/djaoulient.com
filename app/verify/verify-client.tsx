@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { t } from "@/lib/i18n/translations";
 
@@ -46,6 +47,42 @@ interface TicketData {
 
 const PIN_CACHE_KEY = "staff_verification_pin";
 const PIN_CACHE_DURATION = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+
+/** QR sometimes contains a full verify URL, wrapped quotes, or only the id query segment. */
+function normalizeTicketIdentifier(raw: string): string {
+  let s = raw.trim();
+  if (!s) return s;
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  try {
+    if (/^https?:\/\//i.test(s) && /verify/i.test(s)) {
+      const u = new URL(s);
+      const id = u.searchParams.get("id");
+      if (id) {
+        try {
+          return decodeURIComponent(id).trim();
+        } catch {
+          return id.trim();
+        }
+      }
+    }
+  } catch {
+    // not a usable URL
+  }
+  const idFromQuery = s.match(/[?&]id=([^&]+)/i);
+  if (idFromQuery?.[1]) {
+    try {
+      return decodeURIComponent(idFromQuery[1]).trim();
+    } catch {
+      return idFromQuery[1].trim();
+    }
+  }
+  return s;
+}
 
 // Audio feedback for scanning
 const playSuccessSound = () => {
@@ -215,7 +252,11 @@ interface VerifyClientProps {
 }
 
 
-export function VerifyClient({ ticketId }: VerifyClientProps) {
+export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
+  const searchParams = useSearchParams();
+  const ticketId =
+    searchParams.get("id")?.trim() || ticketIdProp?.trim() || undefined;
+
   const { currentLanguage } = useTranslation();
   const [pin, setPin] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -228,6 +269,8 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
 
   // Guard: only fire one verification request per unique ticketId
   const verifiedTicketRef = useRef<string | null>(null);
+  const isVerifiedRef = useRef(false);
+  const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(async () => {});
 
   // Check for cached PIN on component mount
   useEffect(() => {
@@ -266,6 +309,10 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
     checkCachedPin();
   }, []);
 
+  useEffect(() => {
+    isVerifiedRef.current = isVerified;
+  }, [isVerified]);
+
   // Reset state when ticketId changes (for continuous scanning workflow)
   useEffect(() => {
     if (ticketId) {
@@ -280,10 +327,11 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
   // Auto-verify ticket when page loads with ID and user is verified
   // useRef guard ensures exactly ONE request fires per unique ticketId
   useEffect(() => {
-    if (ticketId && isVerified && verifiedTicketRef.current !== ticketId) {
-      verifiedTicketRef.current = ticketId;
-      verifyTicket(ticketId);
-    }
+    if (!ticketId || !isVerified) return;
+    const normalized = normalizeTicketIdentifier(ticketId);
+    if (verifiedTicketRef.current === normalized) return;
+    verifiedTicketRef.current = normalized;
+    verifyTicket(normalized);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId, isVerified]);
 
@@ -334,7 +382,7 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
       setErrorCode(null);
       setTicketData(null);
 
-      const trimmedId = ticketIdentifier.trim();
+      const trimmedId = normalizeTicketIdentifier(ticketIdentifier);
 
       try {
         // Single direct call - edge function handles deduplication server-side
@@ -416,6 +464,30 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
     },
     [getUserFriendlyError]
   );
+
+  useEffect(() => {
+    verifyTicketFnRef.current = verifyTicket;
+  }, [verifyTicket]);
+
+  // iOS/Safari: camera handoff can restore this tab from bfcache with old React state
+  // while the URL already points at a new ?id= — clear UI and re-verify from window.location.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      verifiedTicketRef.current = null;
+      setTicketData(null);
+      setError(null);
+      setErrorCode(null);
+      setWasJustAdmitted(false);
+      const raw = new URLSearchParams(window.location.search).get("id");
+      const normalized = raw ? normalizeTicketIdentifier(raw) : "";
+      if (!normalized || !isVerifiedRef.current) return;
+      verifiedTicketRef.current = normalized;
+      void verifyTicketFnRef.current(normalized);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -792,36 +864,20 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
                         <p className="text-2xl font-semibold text-foreground tracking-tight">
                           {ticketData.customer_name}
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          {ticketData.remaining_tickets !== undefined
-                            ? t(
+                          <p className="text-sm text-muted-foreground">
+                            {t(
                               currentLanguage,
-                              "ticketVerification.quantity.remainingOfTotal",
+                              "ticketVerification.quantity.scannedRemaining",
                               {
-                                remaining: ticketData.remaining_tickets,
-                                total: ticketData.use_count == null ? 1 : (ticketData.total_quantity || 1),
-                              },
-                            )
-                            : ticketData.use_count != null && ticketData.total_quantity != null
-                              ? t(
-                                currentLanguage,
-                                "ticketVerification.quantity.scannedRemaining",
-                                {
-                                  scannedCount: ticketData.use_count,
-                                  remainingCount: ticketData.total_quantity - ticketData.use_count,
-                                }
-                              )
-                              : `${ticketData.quantity} ${ticketData.quantity > 1
-                                ? t(
-                                  currentLanguage,
-                                  "ticketVerification.quantity.people",
-                                )
-                                : t(
-                                  currentLanguage,
-                                  "ticketVerification.quantity.person",
-                                )
-                              }`}
-                        </p>
+                                scannedCount: ticketData.use_count != null 
+                                  ? ticketData.use_count 
+                                  : (1 - (ticketData.remaining_tickets || 0)),
+                                remainingCount: ticketData.remaining_tickets != null 
+                                  ? ticketData.remaining_tickets 
+                                  : ((ticketData.total_quantity || 1) - (ticketData.use_count || 0)),
+                              }
+                            )}
+                          </p>
                       </div>
                     </div>
                   )}

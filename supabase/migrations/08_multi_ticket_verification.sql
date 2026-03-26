@@ -65,6 +65,7 @@ DECLARE
     purchase_record RECORD;
     actual_ticket_quantity INTEGER;
     new_ticket_identifier TEXT;
+    existing_ticket_count INTEGER;
 BEGIN
     -- Get purchase details
     SELECT * INTO purchase_record FROM public.purchases WHERE id = p_purchase_id;
@@ -85,8 +86,29 @@ BEGIN
         1
     );
 
-    -- Delete existing tickets for this purchase to ensure a clean slate on retry
-    DELETE FROM public.individual_tickets WHERE purchase_id = p_purchase_id;
+    -- Check how many tickets already exist
+    SELECT count(*) INTO existing_ticket_count FROM public.individual_tickets WHERE purchase_id = p_purchase_id;
+
+    IF existing_ticket_count >= actual_ticket_quantity THEN
+        -- Tickets already exist, just return the existing ones (idempotent safe)
+        FOR new_ticket_identifier IN 
+            SELECT it.ticket_identifier FROM public.individual_tickets it WHERE it.purchase_id = p_purchase_id
+        LOOP
+            ticket_identifier := new_ticket_identifier;
+            RETURN NEXT;
+        END LOOP;
+        RETURN;
+    END IF;
+
+    -- If there's a mismatch (partial generation failure previously), clean slate ONLY IF none are used
+    IF existing_ticket_count > 0 THEN
+        PERFORM 1 FROM public.individual_tickets WHERE purchase_id = p_purchase_id AND is_used = TRUE;
+        IF FOUND THEN
+            RAISE EXCEPTION 'Cannot regenerate tickets for purchase % because some tickets are already used.', p_purchase_id;
+        END IF;
+        -- Safe to clean slate because none were used
+        DELETE FROM public.individual_tickets WHERE purchase_id = p_purchase_id;
+    END IF;
 
     -- Generate N individual tickets and return their identifiers
     FOR i IN 1..actual_ticket_quantity LOOP
@@ -182,7 +204,7 @@ BEGIN
             purchase_record.event_venue_name, purchase_record.ticket_type_id, purchase_record.ticket_name,
             1, purchase_record.price_per_ticket, purchase_record.total_amount, purchase_record.currency_code,
             individual_ticket.status, individual_ticket.is_used, individual_ticket.used_at, individual_ticket.verified_by,
-            NULL::INTEGER, purchase_record.quantity;
+            NULL::INTEGER, 1;  -- Each individual ticket = 1 admission. total_quantity must NOT be purchase quantity.
         RETURN;
     END IF;
 
@@ -231,10 +253,9 @@ AS $$
 DECLARE
     individual_ticket RECORD;
     purchase_record RECORD;
-    last_scan_time TIMESTAMPTZ;
     time_since_last_scan INTERVAL;
 BEGIN
-    SELECT * INTO individual_ticket FROM public.individual_tickets WHERE ticket_identifier = p_ticket_identifier;
+    SELECT * INTO individual_ticket FROM public.individual_tickets it WHERE it.ticket_identifier = p_ticket_identifier;
 
     IF FOUND THEN
         IF individual_ticket.used_at IS NOT NULL THEN

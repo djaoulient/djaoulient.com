@@ -20,7 +20,7 @@ export default async function VerifyTicketPage({
         </div>
       }
     >
-      <VerifyClient ticketId={params.id} />
+      <VerifyClient key={params.id ?? "no-id"} ticketId={params.id} />
     </Suspense>
   );
 }
