@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
       `Ticket verified: ${ticket.customer_name} - ${ticket.event_title}`,
     );
 
-    // Purchase-level admission budget (guest list + legacy). Per-QR must still be unused.
+    // Purchase-level counts from DB; per-QR scans still require !ticket.is_used when applicable.
     const totalQty = Math.max(1, Number(ticket.total_quantity) || 1);
     const useCount = Math.max(0, Number(ticket.use_count) || 0);
     const canBeAdmitted =

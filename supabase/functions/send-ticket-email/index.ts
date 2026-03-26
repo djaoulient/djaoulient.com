@@ -205,12 +205,23 @@ Deno.serve(async (req: Request) => {
       `Bundle calculation: isBundle=${isBundle}, quantity=${purchaseData.quantity}, ticketsPerBundle=${ticketsPerBundle}, actualTicketQuantity=${actualTicketQuantity}`,
     );
 
-    // --- NEW LOGIC: Decide between individual tickets or legacy single QR ---
-    const INDIVIDUAL_TICKETS_CUTOFF_DATE = new Date("2025-07-01"); // Use new system for all purchases from July 1, 2025
+    // Per-ticket QRs whenever individual rows exist (e.g. guest list ×1) or multi-admission cutoff applies
+    const INDIVIDUAL_TICKETS_CUTOFF_DATE = new Date("2025-07-01");
     const purchaseDate = new Date(purchaseData.created_at || Date.now());
-    const useIndividualTickets =
-      purchaseDate >= INDIVIDUAL_TICKETS_CUTOFF_DATE &&
-      actualTicketQuantity > 1;
+    let useIndividualTickets =
+      purchaseData.individual_tickets_generated === true ||
+      (purchaseDate >= INDIVIDUAL_TICKETS_CUTOFF_DATE &&
+        actualTicketQuantity > 1);
+
+    if (!useIndividualTickets) {
+      const { data: hasIndividuals, error: hasIndividualsErr } = await supabase.rpc(
+        "purchase_has_individual_tickets",
+        { p_purchase_id: purchaseIdFromRequest },
+      );
+      if (!hasIndividualsErr && hasIndividuals === true) {
+        useIndividualTickets = true;
+      }
+    }
 
     let ticketIdentifiers: string[] = [];
     const qrCodeData: Array<{ identifier: string; qrCodeBytes: Uint8Array }> =
@@ -283,9 +294,8 @@ Deno.serve(async (req: Request) => {
         }
       }
     } else {
-      // Legacy single QR code system
       console.log(
-        `Using legacy single QR system for purchase ${purchaseIdFromRequest}`,
+        `Using single purchase-level QR for ${purchaseIdFromRequest} (no individual ticket rows)`,
       );
       ticketIdentifiers = [uniqueTicketId];
 

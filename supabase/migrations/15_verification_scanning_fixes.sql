@@ -1,97 +1,5 @@
 -- Deploy fixes for verification / admin RPCs on databases that already ran older migrations.
--- (mark_ticket_used: table-qualified lookup; RETURN QUERY functions: #variable_conflict use_column
---  so OUT param names like ticket_identifier / event_id do not clash with SQL column refs.)
-
-CREATE OR REPLACE FUNCTION public.mark_ticket_used(
-    p_ticket_identifier TEXT,
-    p_verified_by TEXT
-)
-RETURNS TEXT
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-    individual_ticket RECORD;
-    purchase_record RECORD;
-    time_since_last_scan INTERVAL;
-BEGIN
-    SELECT * INTO individual_ticket FROM public.individual_tickets it WHERE it.ticket_identifier = p_ticket_identifier;
-
-    IF FOUND THEN
-        IF individual_ticket.used_at IS NOT NULL THEN
-            time_since_last_scan := NOW() - individual_ticket.used_at;
-            IF time_since_last_scan < INTERVAL '2 seconds' THEN
-                PERFORM public.log_verification_attempt(
-                    p_ticket_identifier, NULL, NULL, FALSE, 'DUPLICATE_SCAN', 'Ticket scanned again within 2 seconds of last scan', p_verified_by
-                );
-                RETURN 'DUPLICATE_SCAN';
-            END IF;
-        END IF;
-
-        IF individual_ticket.is_used THEN
-            SELECT p.event_id, p.event_title INTO purchase_record
-            FROM public.purchases p WHERE p.id = individual_ticket.purchase_id;
-
-            PERFORM public.log_verification_attempt(
-                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'ALREADY_USED', 'Ticket has already been used for entry', p_verified_by
-            );
-            RETURN 'ALREADY_USED';
-        END IF;
-
-        UPDATE public.individual_tickets
-        SET is_used = TRUE, used_at = NOW(), verified_by = p_verified_by, status = 'used', updated_at = NOW()
-        WHERE id = individual_ticket.id;
-
-        SELECT p.event_id, p.event_title INTO purchase_record
-        FROM public.purchases p WHERE p.id = individual_ticket.purchase_id;
-
-        PERFORM public.log_verification_attempt(
-            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, 'Individual ticket marked as used', p_verified_by
-        );
-
-        RETURN 'SUCCESS';
-    END IF;
-
-    SELECT * INTO purchase_record FROM public.purchases WHERE unique_ticket_identifier = p_ticket_identifier;
-
-    IF FOUND THEN
-        IF purchase_record.used_at IS NOT NULL THEN
-            time_since_last_scan := NOW() - purchase_record.used_at;
-            IF time_since_last_scan < INTERVAL '2 seconds' THEN
-                PERFORM public.log_verification_attempt(
-                    p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'DUPLICATE_SCAN', 'Ticket scanned again within 2 seconds of last scan', p_verified_by
-                );
-                RETURN 'DUPLICATE_SCAN';
-            END IF;
-        END IF;
-
-        IF purchase_record.use_count >= purchase_record.quantity THEN
-            PERFORM public.log_verification_attempt(
-                p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, FALSE, 'ALREADY_USED', 'Legacy ticket fully used (all admissions consumed)', p_verified_by
-            );
-            RETURN 'ALREADY_USED';
-        END IF;
-
-        UPDATE public.purchases
-        SET use_count = purchase_record.use_count + 1, used_at = NOW(), verified_by = p_verified_by,
-            is_used = (purchase_record.use_count + 1) >= purchase_record.quantity, updated_at = NOW()
-        WHERE id = purchase_record.id;
-
-        PERFORM public.log_verification_attempt(
-            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, 'Legacy ticket admission recorded', p_verified_by
-        );
-
-        RETURN 'SUCCESS';
-    END IF;
-
-    PERFORM public.log_verification_attempt(
-        p_ticket_identifier, NULL, NULL, FALSE, 'NOT_FOUND', 'Ticket identifier not found in system', p_verified_by
-    );
-
-    RETURN 'NOT_FOUND';
-END;
-$$;
+-- mark_ticket_used, verify_ticket, sync_purchase_admission_from_individuals: see 08_multi_ticket_verification.sql
 
 CREATE OR REPLACE FUNCTION public.get_recent_verification_errors(
     p_limit INTEGER DEFAULT 20,
@@ -221,8 +129,6 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.mark_ticket_used(TEXT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.mark_ticket_used(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_recent_verification_errors(INTEGER, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_recent_verification_errors(INTEGER, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_event_guest_list(TEXT) TO service_role;
