@@ -462,7 +462,8 @@
       "person": "person",
       "scanned": "scanned",
       "remaining": "remaining",
-      "remainingOfTotal": "{remaining} of {total} remaining"
+      "remainingOfTotal": "{remaining} of {total} remaining",
+      "scannedRemaining": "{scannedCount} ticket(s) scanned. {remainingCount} remaining."
     },
     "checkedInLabel": "Checked in:"
   },

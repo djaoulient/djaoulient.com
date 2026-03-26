@@ -149,10 +149,21 @@ Deno.serve(async (req: Request) => {
 
         if (isRecentlyUsed) {
           console.log(`Ticket was used very recently (${nowTime - usedAtTime}ms ago), likely a prefetch or retry. Treated as success.`);
+          
+          // FAKE the ticket state so the UI displays the green valid screen instead of "Already Used"
+          const fakedTicket = { ...ticketWithRemaining };
+          if (isLegacyTicket) {
+             fakedTicket.use_count = Math.max(0, (fakedTicket.use_count || 0) - 1);
+             fakedTicket.remaining_tickets = Math.max(0, fakedTicket.total_quantity - fakedTicket.use_count);
+          } else {
+             fakedTicket.is_used = false;
+             fakedTicket.remaining_tickets = 1;
+          }
+
           return new Response(
             JSON.stringify({
               success: true,
-              ticket_data: ticketWithRemaining,
+              ticket_data: fakedTicket,
               admitted: true,
               warning: "RECENT_DUPLICATE_TREATED_AS_SUCCESS"
             }),

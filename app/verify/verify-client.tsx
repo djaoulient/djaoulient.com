@@ -1074,12 +1074,15 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
                                   total: ticketData.total_quantity || 1,
                                 },
                               )
-                            : ticketData.use_count !== undefined &&
-                                ticketData.total_quantity
-                              ? `${ticketData.use_count} / ${ticketData.total_quantity} ${t(
+                            : ticketData.use_count !== undefined && ticketData.total_quantity !== undefined
+                              ? t(
                                   currentLanguage,
-                                  "ticketVerification.quantity.scanned",
-                                )}`
+                                  "ticketVerification.quantity.scannedRemaining",
+                                  {
+                                    scannedCount: ticketData.use_count,
+                                    remainingCount: ticketData.total_quantity - ticketData.use_count,
+                                  }
+                                )
                               : `${ticketData.quantity} ${
                                   ticketData.quantity > 1
                                     ? t(

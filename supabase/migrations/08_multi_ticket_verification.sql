@@ -175,10 +175,6 @@ BEGIN
             );
             RAISE EXCEPTION 'UNPAID_TICKET: This ticket has not been paid for';
         END IF;
-
-        PERFORM public.log_verification_attempt(
-            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, NULL, p_scanner_email
-        );
         
         RETURN QUERY SELECT
             purchase_record.id, purchase_record.customer_name, purchase_record.customer_email, purchase_record.customer_phone,
@@ -203,10 +199,6 @@ BEGIN
             );
             RAISE EXCEPTION 'UNPAID_TICKET: This ticket has not been paid for';
         END IF;
-
-        PERFORM public.log_verification_attempt(
-            p_ticket_identifier, purchase_record.event_id, purchase_record.event_title, TRUE, NULL, NULL, p_scanner_email
-        );
 
         RETURN QUERY SELECT
             purchase_record.id, purchase_record.customer_name, purchase_record.customer_email, purchase_record.customer_phone,
