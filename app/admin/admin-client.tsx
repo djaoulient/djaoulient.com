@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -54,8 +61,8 @@ interface Purchase {
   customer_name: string;
   customer_email: string;
   customer_phone: string;
-  event_id: string;
-  event_title: string;
+  event_id: string | null;
+  event_title: string | null;
   event_date_text: string;
   event_time_text: string;
   event_venue_name: string;
@@ -106,6 +113,24 @@ function getAdmissionScanState(p: Purchase): AdmissionScanState {
   return "partial";
 }
 
+/** Event ticket / pack rows only (excludes merch and other non-event sales). */
+function isEventTicketPurchase(p: Purchase): boolean {
+  return p.event_id != null && String(p.event_id).trim() !== "";
+}
+
+/** Stable id for filter dropdown: distinguishes bundle vs ticket with same title. */
+function offeringLineKey(p: Purchase): string {
+  const raw = (p.ticket_name ?? "").trim();
+  const name = raw || "—";
+  return p.is_bundle ? `bundle:${name}` : `ticket:${name}`;
+}
+
+function offeringLineLabel(p: Purchase): string {
+  const raw = (p.ticket_name ?? "").trim();
+  const name = raw || "Untitled";
+  return p.is_bundle ? `${name} (pack)` : name;
+}
+
 interface EventInfo {
   event_id: string;
   event_title: string;
@@ -152,6 +177,8 @@ export default function AdminClient() {
 
   const [statusFilter, setStatusFilter] = useState<string>("paid");
   const [admissionFilter, setAdmissionFilter] = useState<string>("all"); // 'all', 'scanned' (fully admitted), 'unscanned' (no scans yet)
+  /** 'all' or offeringLineKey — options rebuilt from loaded purchases */
+  const [offeringFilter, setOfferingFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Guest invitation state
@@ -719,8 +746,47 @@ export default function AdminClient() {
     return true;
   });
 
+  // Item names from data (ticket_name from Sanity / checkout) — scoped by status + event
+  const offeringOptions = useMemo(() => {
+    const statusFiltered = purchases.filter((purchase) => {
+      if (statusFilter === "paid" && purchase.status !== "paid") return false;
+      if (statusFilter === "all") return true;
+      if (statusFilter === "pending" && purchase.status !== "pending_payment")
+        return false;
+      if (statusFilter === "failed" && purchase.status !== "payment_failed")
+        return false;
+      return true;
+    });
+    const scoped = statusFiltered
+      .filter(isEventTicketPurchase)
+      .filter(
+        (p) =>
+          !selectedEvent ||
+          (p.event_id != null && String(p.event_id) === selectedEvent),
+      );
+    const map = new Map<string, string>();
+    for (const p of scoped) {
+      const key = offeringLineKey(p);
+      if (!map.has(key)) map.set(key, offeringLineLabel(p));
+    }
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+  }, [purchases, statusFilter, selectedEvent]);
+
+  useEffect(() => {
+    if (offeringFilter === "all") return;
+    if (!offeringOptions.some((o) => o.value === offeringFilter)) {
+      setOfferingFilter("all");
+    }
+  }, [offeringFilter, offeringOptions]);
+
   // Filter purchases by status AND search (for table display)
   const filteredPurchases = statusFilteredPurchases.filter((purchase) => {
+    if (!isEventTicketPurchase(purchase)) return false;
+
     // Event filter: when an event is selected, only show its purchases
     // (defense-in-depth: backend should filter, but search/race conditions can mix data)
     if (selectedEvent && purchase.event_id !== selectedEvent) return false;
@@ -731,7 +797,13 @@ export default function AdminClient() {
     if (admissionFilter === "unscanned" && admissionScan !== "none")
       return false;
 
-    // Search query
+    if (
+      offeringFilter !== "all" &&
+      offeringLineKey(purchase) !== offeringFilter
+    ) {
+      return false;
+    }
+
     if (!searchQuery.trim()) return true;
 
     const query = searchQuery.toLowerCase();
@@ -739,6 +811,7 @@ export default function AdminClient() {
       purchase.customer_name?.toLowerCase().includes(query) ||
       purchase.customer_email?.toLowerCase().includes(query) ||
       purchase.event_title?.toLowerCase().includes(query) ||
+      purchase.ticket_name?.toLowerCase().includes(query) ||
       purchase.purchase_id.toLowerCase().includes(query)
     );
   });
@@ -1077,33 +1150,69 @@ export default function AdminClient() {
                       </Button>
                     </div>
 
-                    {/* Search and Actions */}
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-2">
-                      <div className="flex-1 flex gap-2">
-                        <Input
-                          id="search"
-                          placeholder="Search..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="rounded-sm bg-card/30 backdrop-blur-sm border-slate-700 text-gray-100 placeholder:text-gray-400 h-9 sm:h-12 flex-1 text-sm sm:text-base"
-                        />
-                        <Button
-                          onClick={searchPurchases}
-                          variant="outline"
-                          size="sm"
-                          className="rounded-sm border-slate-700 text-gray-100 hover:bg-card/70 h-9 sm:h-12 px-2 sm:px-3 shrink-0"
-                          disabled={loading}
-                        >
-                          <Search className="h-4 w-4" />
-                        </Button>
+                    {/* Search, product type, and actions */}
+                    <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-stretch">
+                        <div className="flex min-w-0 flex-1 gap-2">
+                          <Input
+                            id="search"
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-8 flex-1 rounded-sm border-slate-700 bg-card/30 text-sm text-gray-100 placeholder:text-gray-400 backdrop-blur-sm sm:h-10 sm:text-base"
+                          />
+                          <Button
+                            onClick={searchPurchases}
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 shrink-0 touch-manipulation rounded-sm border-slate-700 p-0 text-gray-100 hover:bg-card/70 sm:h-10 sm:w-10"
+                            disabled={loading}
+                            aria-label="Search purchases"
+                          >
+                            <Search className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="w-full shrink-0 sm:w-[min(100%,20rem)]">
+                          <Label
+                            htmlFor="offering-filter"
+                            className="sr-only"
+                          >
+                            Ticket or pack
+                          </Label>
+                          <Select
+                            value={offeringFilter}
+                            onValueChange={setOfferingFilter}
+                          >
+                            <SelectTrigger
+                              id="offering-filter"
+                              className="h-8 w-full max-w-full touch-manipulation rounded-sm border-slate-700 bg-card/30 text-gray-100 backdrop-blur-sm focus:ring-slate-600 sm:h-10 [&>svg]:text-slate-400"
+                            aria-label="Filter by item"
+                            >
+                              <SelectValue placeholder="Item" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[min(24rem,70vh)] border-slate-700 bg-slate-950 text-gray-100">
+                              <SelectItem value="all">
+                                All items
+                              </SelectItem>
+                              {offeringOptions.map(({ value, label }) => (
+                                <SelectItem key={value} value={value}>
+                                  <span className="line-clamp-2 text-left">
+                                    {label}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 lg:shrink-0">
                         <Button
                           onClick={loadPurchases}
                           variant="outline"
                           size="sm"
-                          className="rounded-sm border-slate-700 text-gray-100 hover:bg-card/70 h-9 sm:h-12 px-2 sm:px-3 flex-1 sm:flex-none"
+                          className="h-8 w-8 touch-manipulation rounded-sm border-slate-700 p-0 text-gray-100 hover:bg-card/70 sm:h-10 sm:w-10"
                           disabled={loading}
+                          aria-label="Refresh purchases"
                         >
                           <RefreshCw
                             className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
@@ -1114,8 +1223,9 @@ export default function AdminClient() {
                           onClick={downloadCSV}
                           variant="outline"
                           size="sm"
-                          className="rounded-sm border-slate-700 text-gray-100 hover:bg-card/70 h-9 sm:h-12 px-2 sm:px-3 flex-1 sm:flex-none"
+                          className="h-8 w-8 touch-manipulation rounded-sm border-slate-700 p-0 text-gray-100 hover:bg-card/70 sm:h-10 sm:w-10"
                           disabled={loading}
+                          aria-label="Export purchases"
                         >
                           <Download className="h-4 w-4" />
                           <span className="ml-2 sm:hidden">Export</span>
@@ -1152,8 +1262,17 @@ export default function AdminClient() {
                           <TableHead className="text-left w-[18%]">
                             Customer
                           </TableHead>
-                          <TableHead className="text-left hidden sm:table-cell w-[20%]">
-                            Event
+                          {!selectedEvent && (
+                            <TableHead className="text-left hidden sm:table-cell w-[11%]">
+                              Event
+                            </TableHead>
+                          )}
+                          <TableHead
+                            className={`text-left hidden sm:table-cell ${
+                              selectedEvent ? "w-[22%]" : "w-[11%]"
+                            }`}
+                          >
+                            Item
                           </TableHead>
                           <TableHead className="text-center w-[10%]">
                             Tickets
@@ -1188,20 +1307,65 @@ export default function AdminClient() {
                                   <div className="text-xs text-gray-400 truncate max-w-[120px] sm:max-w-none">
                                     {purchase.customer_email}
                                   </div>
+                                  <div className="mt-1.5 space-y-0.5 sm:hidden text-xs text-gray-500">
+                                    <div
+                                      className="truncate"
+                                      title={purchase.event_title ?? undefined}
+                                    >
+                                      {purchase.event_title || "—"}
+                                    </div>
+                                    <div className="truncate text-gray-400">
+                                      {purchase.is_bundle ? (
+                                        <>
+                                          <span className="text-gray-300">
+                                            {purchase.ticket_name || "—"}
+                                          </span>
+                                          <span>
+                                            {" "}
+                                            × {purchase.quantity} pack ·{" "}
+                                            {getAdmissionTotal(purchase)} tickets
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {purchase.ticket_name || "—"} ×{" "}
+                                          {purchase.quantity}
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </TableCell>
 
-                              {/* Event Info - Hidden on mobile */}
-                              <TableCell className="hidden sm:table-cell w-[20%]">
-                                <div className="text-sm text-gray-100 truncate max-w-[150px]">
-                                  {purchase.event_title}
-                                </div>
-                                <div className="text-xs text-gray-400 truncate max-w-[150px]">
+                              {!selectedEvent && (
+                                <TableCell className="hidden sm:table-cell w-[11%]">
+                                  <div
+                                    className="text-sm text-gray-100 truncate max-w-[140px]"
+                                    title={purchase.event_title ?? undefined}
+                                  >
+                                    {purchase.event_title || "—"}
+                                  </div>
+                                </TableCell>
+                              )}
+
+                              <TableCell
+                                className={`hidden sm:table-cell ${
+                                  selectedEvent ? "w-[22%]" : "w-[11%]"
+                                }`}
+                              >
+                                <div
+                                  className={`text-xs text-gray-400 truncate ${
+                                    selectedEvent ? "max-w-[240px]" : "max-w-[140px]"
+                                  }`}
+                                >
                                   {purchase.is_bundle ? (
                                     <>
-                                      <span className="text-sm text-gray-100 truncate block">
-                                        {purchase.ticket_name}
-                                      </span>
+                                      <div
+                                        className="text-sm text-gray-100 truncate"
+                                        title={purchase.ticket_name}
+                                      >
+                                        {purchase.ticket_name || "—"}
+                                      </div>
                                       <span>
                                         × {purchase.quantity} pack ·{" "}
                                         {getAdmissionTotal(purchase)} tickets
@@ -1209,8 +1373,13 @@ export default function AdminClient() {
                                     </>
                                   ) : (
                                     <>
-                                      {purchase.ticket_name} ×{" "}
-                                      {purchase.quantity}
+                                      <span
+                                        className="text-sm text-gray-100"
+                                        title={purchase.ticket_name}
+                                      >
+                                        {purchase.ticket_name || "—"}
+                                      </span>{" "}
+                                      × {purchase.quantity}
                                     </>
                                   )}
                                 </div>
@@ -1253,11 +1422,12 @@ export default function AdminClient() {
                               {/* Payment Status */}
                               <TableCell className="text-center w-[12%]">
                                 <div className="flex flex-col items-center gap-1">
-                                  {getPaymentStatusBadge(purchase.status)}
-                                  {isTrueAbandonment(purchase) && (
+                                  {isTrueAbandonment(purchase) ? (
                                     <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 rounded-sm text-xs max-w-[100px] sm:max-w-none whitespace-normal sm:whitespace-nowrap">
                                       Abandoned Cart
                                     </Badge>
+                                  ) : (
+                                    getPaymentStatusBadge(purchase.status)
                                   )}
                                 </div>
                               </TableCell>
@@ -1265,8 +1435,10 @@ export default function AdminClient() {
                               {/* Email Status */}
                               <TableCell className="text-center w-[14%]">
                                 <div className="flex flex-col items-center gap-1">
-                                  {getStatusBadge(
-                                    purchase.email_dispatch_status,
+                                  {canSendEmail(purchase) ? (
+                                    getStatusBadge(purchase.email_dispatch_status)
+                                  ) : (
+                                    <span className="text-xs text-gray-500">—</span>
                                   )}
                                   {purchase.pdf_ticket_sent_at && (
                                     <span className="text-xs text-gray-500">
@@ -1280,24 +1452,27 @@ export default function AdminClient() {
 
                               {/* Actions */}
                               <TableCell className="text-center w-[14%]">
-                                <Button
-                                  size="sm"
-                                  onClick={() => openEmailDialog(purchase)}
-                                  className={`rounded-sm text-white text-xs ${
-                                    recoveryRow
-                                      ? "bg-amber-600 hover:bg-amber-700"
-                                      : "bg-blue-600 hover:bg-blue-700"
-                                  }`}
-                                  disabled={!canSendEmail(purchase)}
-                                >
-                                  <EmailIcon className="h-3 w-3 mr-1" />
-                                  <span className="hidden sm:inline ml-1">
-                                    {getEmailButtonText(purchase)}
-                                  </span>
-                                  <span className="sm:hidden">
-                                    {recoveryRow ? "Recovery" : "Email"}
-                                  </span>
-                                </Button>
+                                {canSendEmail(purchase) ? (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openEmailDialog(purchase)}
+                                    className={`rounded-sm text-white text-xs ${
+                                      recoveryRow
+                                        ? "bg-amber-600 hover:bg-amber-700"
+                                        : "bg-blue-600 hover:bg-blue-700"
+                                    }`}
+                                  >
+                                    <EmailIcon className="h-3 w-3 mr-1" />
+                                    <span className="hidden sm:inline ml-1">
+                                      {getEmailButtonText(purchase)}
+                                    </span>
+                                    <span className="sm:hidden">
+                                      {recoveryRow ? "Recovery" : "Email"}
+                                    </span>
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-gray-500">—</span>
+                                )}
                               </TableCell>
                             </TableRow>
                           );
