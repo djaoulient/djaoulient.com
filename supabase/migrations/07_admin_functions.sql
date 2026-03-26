@@ -70,7 +70,9 @@ BEGIN
         p.verified_by,
         (
             CASE
-                WHEN p.individual_tickets_generated THEN
+                WHEN EXISTS (
+                    SELECT 1 FROM public.individual_tickets it0 WHERE it0.purchase_id = p.id
+                ) THEN
                     (
                         SELECT COUNT(*)::BIGINT
                         FROM public.individual_tickets it
@@ -168,7 +170,9 @@ BEGIN
         p.verified_by,
         (
             CASE
-                WHEN p.individual_tickets_generated THEN
+                WHEN EXISTS (
+                    SELECT 1 FROM public.individual_tickets it0 WHERE it0.purchase_id = p.id
+                ) THEN
                     (
                         SELECT COUNT(*)::BIGINT
                         FROM public.individual_tickets it

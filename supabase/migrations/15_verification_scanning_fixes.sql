@@ -229,3 +229,11 @@ GRANT EXECUTE ON FUNCTION public.get_event_guest_list(TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_event_guest_list(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_admin_verification_logs(TEXT, INTEGER, INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_admin_verification_logs(TEXT, INTEGER, INTEGER) TO authenticated;
+
+-- Align flag for purchases that already have individual_tickets rows (e.g. guest list before issue_guest_ticket set the flag).
+UPDATE public.purchases p
+SET individual_tickets_generated = TRUE
+WHERE EXISTS (
+    SELECT 1 FROM public.individual_tickets it WHERE it.purchase_id = p.id
+)
+AND p.individual_tickets_generated = FALSE;

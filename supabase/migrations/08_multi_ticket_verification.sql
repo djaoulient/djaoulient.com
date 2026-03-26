@@ -158,7 +158,7 @@ RETURNS TABLE(
     used_at TIMESTAMPTZ,
     verified_by TEXT,
     use_count INTEGER,
-    total_quantity INTEGER 
+    total_quantity INTEGER
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -167,9 +167,6 @@ AS $$
 DECLARE
     individual_ticket RECORD;
     purchase_record RECORD;
-    customer_record RECORD;
-    log_event_id TEXT;
-    log_event_title TEXT;
 BEGIN
     IF p_ticket_identifier IS NULL OR TRIM(p_ticket_identifier) = '' THEN
         RAISE EXCEPTION 'INVALID_TICKET_ID: Ticket identifier cannot be empty';
@@ -178,12 +175,12 @@ BEGIN
     SELECT it.* INTO individual_ticket FROM public.individual_tickets it WHERE it.ticket_identifier = p_ticket_identifier;
 
     IF FOUND THEN
-        SELECT p.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone 
-        INTO purchase_record 
+        SELECT p.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone
+        INTO purchase_record
         FROM public.purchases p
         INNER JOIN public.customers c ON p.customer_id = c.id
         WHERE p.id = individual_ticket.purchase_id;
-        
+
         IF NOT FOUND THEN
             PERFORM public.log_verification_attempt(
                 p_ticket_identifier, NULL, NULL, FALSE, 'ORPHANED_TICKET', 'Individual ticket found but associated purchase not found', p_scanner_email
@@ -197,23 +194,32 @@ BEGIN
             );
             RAISE EXCEPTION 'UNPAID_TICKET: This ticket has not been paid for';
         END IF;
-        
+
         RETURN QUERY SELECT
             purchase_record.id, purchase_record.customer_name, purchase_record.customer_email, purchase_record.customer_phone,
             purchase_record.event_id, purchase_record.event_title, purchase_record.event_date_text, purchase_record.event_time_text,
             purchase_record.event_venue_name, purchase_record.ticket_type_id, purchase_record.ticket_name,
             1, purchase_record.price_per_ticket, purchase_record.total_amount, purchase_record.currency_code,
             individual_ticket.status, individual_ticket.is_used, individual_ticket.used_at, individual_ticket.verified_by,
-            NULL::INTEGER, 1;  -- Each individual ticket = 1 admission. total_quantity must NOT be purchase quantity.
+            (
+                SELECT COUNT(*)::INTEGER
+                FROM public.individual_tickets it_cnt
+                WHERE it_cnt.purchase_id = purchase_record.id AND it_cnt.is_used = TRUE
+            ),
+            (
+                SELECT COUNT(*)::INTEGER
+                FROM public.individual_tickets it_tot
+                WHERE it_tot.purchase_id = purchase_record.id
+            );
         RETURN;
     END IF;
 
     SELECT p.*, c.name as customer_name, c.email as customer_email, c.phone as customer_phone
-    INTO purchase_record 
+    INTO purchase_record
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     WHERE p.unique_ticket_identifier = p_ticket_identifier;
-    
+
     IF FOUND THEN
         IF purchase_record.status != 'paid' THEN
             PERFORM public.log_verification_attempt(
@@ -239,6 +245,8 @@ BEGIN
 END;
 $$;
 
+COMMENT ON FUNCTION public.verify_ticket(TEXT, TEXT) IS
+'Resolves QR to purchase; for individual_tickets rows returns purchase-level use_count (used) and total_quantity (count of individual rows).';
 
 -- 5. Unified Function to Mark Ticket as Used (Enhanced with duplicate protection and logging)
 CREATE OR REPLACE FUNCTION public.mark_ticket_used(

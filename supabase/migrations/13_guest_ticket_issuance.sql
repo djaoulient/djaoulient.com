@@ -112,7 +112,11 @@ BEGIN
             v_ticket_identifiers := array_append(v_ticket_identifiers, v_individual_ticket_id);
         END;
     END LOOP;
-    
+
+    UPDATE public.purchases
+    SET individual_tickets_generated = TRUE
+    WHERE id = v_purchase_id;
+
     -- Return the created purchase info
     RETURN QUERY SELECT v_purchase_id, v_customer_id, v_ticket_identifiers;
 END;
