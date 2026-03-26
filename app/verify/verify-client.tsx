@@ -40,8 +40,8 @@ interface TicketData {
   is_used: boolean;
   used_at?: string;
   verified_by?: string;
-  use_count?: number; // How many times a legacy ticket has been used
-  total_quantity?: number; // The total number of admissions on a legacy ticket
+  use_count?: number; // Admissions already used (legacy or purchase-level for individual QRs)
+  total_quantity?: number; // Total admissions on this purchase (legacy quantity or individual row count)
   remaining_tickets?: number; // Calculated remaining admissions
 }
 
@@ -270,7 +270,9 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   // Guard: only fire one verification request per unique ticketId
   const verifiedTicketRef = useRef<string | null>(null);
   const isVerifiedRef = useRef(false);
-  const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(async () => {});
+  const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(async () => { });
+  /** Bumps when `ticketId` changes so slow responses cannot overwrite UI (mobile / rapid scans). */
+  const verifyGenerationRef = useRef(0);
 
   // Check for cached PIN on component mount
   useEffect(() => {
@@ -316,6 +318,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   // Reset state when ticketId changes (for continuous scanning workflow)
   useEffect(() => {
     if (ticketId) {
+      verifyGenerationRef.current += 1;
       setError(null);
       setErrorCode(null);
       setTicketData(null);
@@ -377,12 +380,15 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
 
   const verifyTicket = useCallback(
     async (ticketIdentifier: string) => {
+      const generation = ++verifyGenerationRef.current;
       setIsLoading(true);
       setError(null);
       setErrorCode(null);
       setTicketData(null);
 
       const trimmedId = normalizeTicketIdentifier(ticketIdentifier);
+
+      const isStale = () => generation !== verifyGenerationRef.current;
 
       try {
         // Single direct call - edge function handles deduplication server-side
@@ -391,11 +397,13 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
           {
             body: {
               ticket_identifier: trimmedId,
-              verified_by: 'staff_portal',
+              verified_by: 'staff',
               auto_admit: true,
             }
           }
         );
+
+        if (isStale()) return;
 
         if (edgeError) {
           throw new Error(`Edge function error: ${edgeError.message}`);
@@ -449,6 +457,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
           setTimeout(() => setFlashColor(null), 300);
         }
       } catch (err) {
+        if (isStale()) return;
         console.error('Verification error:', err);
         const errorMessage = err instanceof Error ? err.message : 'Verification failed';
         const { code, message } = parseErrorMessage(errorMessage);
@@ -459,7 +468,9 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
         setFlashColor('red');
         setTimeout(() => setFlashColor(null), 500);
       } finally {
-        setIsLoading(false);
+        if (!isStale()) {
+          setIsLoading(false);
+        }
       }
     },
     [getUserFriendlyError]
@@ -474,6 +485,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   useEffect(() => {
     const onPageShow = (e: PageTransitionEvent) => {
       if (!e.persisted) return;
+      verifyGenerationRef.current += 1;
       verifiedTicketRef.current = null;
       setTicketData(null);
       setError(null);
@@ -864,20 +876,20 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
                         <p className="text-2xl font-semibold text-foreground tracking-tight">
                           {ticketData.customer_name}
                         </p>
-                          <p className="text-sm text-muted-foreground">
-                            {t(
-                              currentLanguage,
-                              "ticketVerification.quantity.scannedRemaining",
-                              {
-                                scannedCount: ticketData.use_count != null 
-                                  ? ticketData.use_count 
-                                  : (1 - (ticketData.remaining_tickets || 0)),
-                                remainingCount: ticketData.remaining_tickets != null 
-                                  ? ticketData.remaining_tickets 
-                                  : ((ticketData.total_quantity || 1) - (ticketData.use_count || 0)),
-                              }
-                            )}
-                          </p>
+                        <p className="text-sm text-muted-foreground">
+                          {t(
+                            currentLanguage,
+                            "ticketVerification.quantity.scannedRemaining",
+                            {
+                              scannedCount: ticketData.use_count != null
+                                ? ticketData.use_count
+                                : (1 - (ticketData.remaining_tickets || 0)),
+                              remainingCount: ticketData.remaining_tickets != null
+                                ? ticketData.remaining_tickets
+                                : ((ticketData.total_quantity || 1) - (ticketData.use_count || 0)),
+                            }
+                          )}
+                        </p>
                       </div>
                     </div>
                   )}

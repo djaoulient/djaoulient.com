@@ -150,28 +150,17 @@ Deno.serve(async (req: Request) => {
       `Ticket verified: ${ticket.customer_name} - ${ticket.event_title}`,
     );
 
-    // Step 2: Check if ticket can be admitted
-    // Fix: Ensure strict checking for use_count vs total_quantity for legacy tickets
-    const isLegacyTicket =
-      ticket.use_count !== undefined &&
-      ticket.use_count !== null &&
-      ticket.total_quantity !== undefined;
+    // Purchase-level admission budget (guest list + legacy). Per-QR must still be unused.
+    const totalQty = Math.max(1, Number(ticket.total_quantity) || 1);
+    const useCount = Math.max(0, Number(ticket.use_count) || 0);
+    const canBeAdmitted =
+      !ticket.is_used && useCount < totalQty;
+    const remainingTickets = Math.max(0, totalQty - useCount);
 
-    const canBeAdmitted = isLegacyTicket
-      ? ticket.use_count < ticket.total_quantity
-      : !ticket.is_used;
-
-    // Calculate remaining tickets
-    let remainingTickets = 0;
-    if (isLegacyTicket) {
-      remainingTickets = Math.max(0, ticket.total_quantity - ticket.use_count);
-    } else {
-      remainingTickets = ticket.is_used ? 0 : 1;
-    }
-
-    // Add remaining tickets to ticket data for response
     const ticketWithRemaining = {
       ...ticket,
+      total_quantity: totalQty,
+      use_count: useCount,
       remaining_tickets: remainingTickets,
     };
 
@@ -186,15 +175,10 @@ Deno.serve(async (req: Request) => {
         if (isRecentlyUsed) {
           console.log(`Ticket was used very recently (${nowTime - usedAtTime}ms ago), likely a prefetch or retry. Treated as success.`);
           
-          // FAKE the ticket state so the UI displays the green valid screen instead of "Already Used"
-          const fakedTicket = { ...ticketWithRemaining };
-          if (isLegacyTicket) {
-             fakedTicket.use_count = Math.max(0, (fakedTicket.use_count || 0) - 1);
-             fakedTicket.remaining_tickets = Math.max(0, fakedTicket.total_quantity - fakedTicket.use_count);
-          } else {
-             fakedTicket.is_used = false;
-             fakedTicket.remaining_tickets = 1;
-          }
+          const fakedTicket = {
+            ...ticketWithRemaining,
+            remaining_tickets: Math.max(0, totalQty - useCount),
+          };
 
           return new Response(
             JSON.stringify({
@@ -219,7 +203,7 @@ Deno.serve(async (req: Request) => {
           error_code: "ALREADY_USED",
           error_message: ticket.is_used
             ? "Ticket has already been used for entry"
-            : "Legacy ticket fully used (all admissions consumed)",
+            : "All admissions for this ticket have been used",
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -258,10 +242,10 @@ Deno.serve(async (req: Request) => {
 
       if (admitResult === "SUCCESS") {
         admitted = true;
-        // Decrement remaining tickets for the response since we just used one
+        ticketWithRemaining.use_count = useCount + 1;
         ticketWithRemaining.remaining_tickets = Math.max(
           0,
-          ticketWithRemaining.remaining_tickets - 1,
+          totalQty - ticketWithRemaining.use_count,
         );
         console.log(`Ticket successfully admitted: ${trimmedId}`);
       } else {

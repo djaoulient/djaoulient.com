@@ -20,7 +20,8 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
-const fromEmail = Deno.env.get("FROM_EMAIL") || "orders@tickets.djaoulient.com";
+const fromEmail =
+  Deno.env.get("FROM_EMAIL") || "notifications@tickets.djaoulient.com";
 const APP_BASE_URL = (
   Deno.env.get("APP_BASE_URL") || "https://www.djaouli.com"
 ).replace(/\/$/, "");

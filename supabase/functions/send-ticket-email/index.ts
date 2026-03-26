@@ -25,7 +25,7 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
 const fromEmail =
-  Deno.env.get("FROM_EMAIL") || "noreply@tickets.djaoulient.com";
+  Deno.env.get("FROM_EMAIL") || "notifications@tickets.djaoulient.com";
 const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "http://localhost:3000";
 const defaultLogoUrl = "https://www.djaoulient.com/icon.png";
 
