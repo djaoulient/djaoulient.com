@@ -158,6 +158,13 @@ const storage = {
     try {
       // Try localStorage first (persists across browser sessions)
       localStorage.setItem(key, data);
+      
+      // Also set document cookie for cross-app/tab persistence
+      if (typeof document !== 'undefined') {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + (8 * 60 * 60 * 1000)); // 8 hours
+        document.cookie = `${key}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;max-age=${8 * 60 * 60};SameSite=Lax`;
+      }
       return true;
     } catch {
       try {
@@ -173,8 +180,20 @@ const storage = {
     }
   },
   get: (key: string): unknown => {
+    // Try cookie first as it's more reliable across sub-environments (like native camera to Safari transitions)
     try {
-      // Try localStorage first
+      if (typeof document !== 'undefined') {
+        const match = document.cookie.match(new RegExp('(^| )' + key + '=([^;]+)'));
+        if (match && match[2]) {
+          return JSON.parse(decodeURIComponent(match[2]));
+        }
+      }
+    } catch {
+      // Ignore parse errors from cookies
+    }
+
+    try {
+      // Try localStorage
       const data = localStorage.getItem(key);
       if (data) return JSON.parse(data);
     } catch {
@@ -199,6 +218,13 @@ const storage = {
     return null;
   },
   remove: (key: string): void => {
+    try {
+      if (typeof document !== 'undefined') {
+        document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      }
+    } catch {
+      // Ignore errors
+    }
     try {
       localStorage.removeItem(key);
     } catch {
@@ -360,19 +386,28 @@ export function VerifyClient({ ticketId }: VerifyClientProps) {
   useEffect(() => {
     const checkCachedPin = () => {
       try {
-        const cached = storage.get(PIN_CACHE_KEY) as {
-          timestamp: number;
-        } | null;
-        if (cached && cached.timestamp) {
-          const now = Date.now();
-
-          // Check if cached PIN is still valid (within duration)
-          if (now - cached.timestamp < PIN_CACHE_DURATION) {
+        const cached = storage.get(PIN_CACHE_KEY);
+        if (cached) {
+          // Check if it's the newer object format with timestamp
+          if (typeof cached === 'object' && cached !== null && 'timestamp' in cached) {
+            const cacheObj = cached as { timestamp: number };
+            const now = Date.now();
+            
+            // Check if cached PIN is still valid (within duration)
+            if (now - cacheObj.timestamp < PIN_CACHE_DURATION) {
+              setIsVerified(true);
+              return;
+            } else {
+              // Clear expired cache
+              storage.remove(PIN_CACHE_KEY);
+            }
+          } 
+          // Handle legacy format (raw PIN string/number saved before update)
+          else if (typeof cached === 'string' || typeof cached === 'number') {
+            // Upgrade to new format
+            storage.set(PIN_CACHE_KEY, { timestamp: Date.now() });
             setIsVerified(true);
             return;
-          } else {
-            // Clear expired cache
-            storage.remove(PIN_CACHE_KEY);
           }
         }
       } catch {

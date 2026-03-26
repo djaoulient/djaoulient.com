@@ -140,6 +140,29 @@ Deno.serve(async (req: Request) => {
     };
 
     if (!canBeAdmitted) {
+      // Check if it was admitted VERY recently (e.g., last 15 seconds)
+      // This absorbs iOS Safari pre-fetches and network retries gracefully.
+      if (ticket.used_at) {
+        const usedAtTime = new Date(ticket.used_at).getTime();
+        const nowTime = Date.now();
+        const isRecentlyUsed = (nowTime - usedAtTime) < 15000; // 15 seconds
+
+        if (isRecentlyUsed) {
+          console.log(`Ticket was used very recently (${nowTime - usedAtTime}ms ago), likely a prefetch or retry. Treated as success.`);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              ticket_data: ticketWithRemaining,
+              admitted: true,
+              warning: "RECENT_DUPLICATE_TREATED_AS_SUCCESS"
+            }),
+            {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+      }
+
       console.log(`Ticket cannot be admitted: already used`);
       return new Response(
         JSON.stringify({
