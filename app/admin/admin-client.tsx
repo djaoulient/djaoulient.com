@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import supabase from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,9 @@ import {
   Download,
   Filter,
   QrCode,
+  ScanLine,
   UserPlus,
+  MailWarning,
 } from "lucide-react";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/ui/Bouncer";
@@ -94,6 +96,16 @@ function getScannedCount(p: Purchase): number {
   return p.is_used ? getAdmissionTotal(p) : 0;
 }
 
+type AdmissionScanState = "none" | "partial" | "full";
+
+function getAdmissionScanState(p: Purchase): AdmissionScanState {
+  const total = getAdmissionTotal(p);
+  const scanned = getScannedCount(p);
+  if (scanned <= 0) return "none";
+  if (scanned >= total) return "full";
+  return "partial";
+}
+
 interface EventInfo {
   event_id: string;
   event_title: string;
@@ -139,7 +151,7 @@ export default function AdminClient() {
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<string>("paid");
-  const [admissionFilter, setAdmissionFilter] = useState<string>("all"); // 'all', 'scanned', 'unscanned'
+  const [admissionFilter, setAdmissionFilter] = useState<string>("all"); // 'all', 'scanned' (fully admitted), 'unscanned' (no scans yet)
   const [showFilters, setShowFilters] = useState(false);
 
   // Guest invitation state
@@ -153,6 +165,27 @@ export default function AdminClient() {
   // Scanner Tab State
   const [activeTab, setActiveTab] = useState("purchases");
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
+
+  const paidEmailEventKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of purchases) {
+      if (p.status === "paid") {
+        s.add(
+          `${String(p.customer_email ?? "").trim().toLowerCase()}::${String(p.event_id ?? "")}`,
+        );
+      }
+    }
+    return s;
+  }, [purchases]);
+
+  const isTrueAbandonment = useCallback(
+    (purchase: Purchase) => {
+      if (purchase.status !== "payment_failed") return false;
+      const key = `${String(purchase.customer_email ?? "").trim().toLowerCase()}::${String(purchase.event_id ?? "")}`;
+      return !paidEmailEventKeys.has(key);
+    },
+    [paidEmailEventKeys],
+  );
 
   // Helper function to format relative time
   const formatRelativeTime = (timestamp: string | null) => {
@@ -520,16 +553,21 @@ export default function AdminClient() {
         return;
       }
 
-      // Trigger email send
+      const isRecoverySend = isTrueAbandonment(selectedPurchase);
+
       const { error: emailError } = await supabase.functions.invoke(
-        "send-ticket-email",
+        isRecoverySend ? "send-recovery-email" : "send-ticket-email",
         {
           body: { purchase_id: selectedPurchase.purchase_id },
         },
       );
 
       if (emailError) {
-        toast.error("Failed to send email");
+        toast.error(
+          isRecoverySend
+            ? "Failed to send recovery email"
+            : "Failed to send email",
+        );
         console.error("Error sending email:", emailError);
         return;
       }
@@ -537,9 +575,17 @@ export default function AdminClient() {
       const isFirstTime =
         selectedPurchase.email_dispatch_status === "NOT_INITIATED" ||
         selectedPurchase.email_dispatch_attempts === 0;
-      toast.success(
-        isFirstTime ? "Email sent successfully!" : "Email resent successfully!",
-      );
+      if (isRecoverySend) {
+        toast.success(
+          isFirstTime
+            ? "Recovery email sent successfully!"
+            : "Recovery email resent successfully!",
+        );
+      } else {
+        toast.success(
+          isFirstTime ? "Email sent successfully!" : "Email resent successfully!",
+        );
+      }
       setIsEmailDialogOpen(false);
       setSelectedPurchase(null);
       setNewEmail("");
@@ -637,18 +683,25 @@ export default function AdminClient() {
   };
 
   const canSendEmail = (purchase: Purchase) => {
-    // Allow sending if payment is paid, or if it's pending but customer wants to receive the email anyway
-    return purchase.status === "paid" || purchase.status === "pending_payment";
+    return (
+      purchase.status === "paid" ||
+      purchase.status === "pending_payment" ||
+      isTrueAbandonment(purchase)
+    );
   };
 
   const getEmailButtonText = (purchase: Purchase) => {
     const isFirstTime =
       purchase.email_dispatch_status === "NOT_INITIATED" ||
       purchase.email_dispatch_attempts === 0;
+    if (isTrueAbandonment(purchase)) {
+      return isFirstTime ? "Recovery Email" : "Resend Recovery";
+    }
     return isFirstTime ? "Send Email" : "Resend Email";
   };
 
   const getEmailButtonIcon = (purchase: Purchase) => {
+    if (isTrueAbandonment(purchase)) return MailWarning;
     const isFirstTime =
       purchase.email_dispatch_status === "NOT_INITIATED" ||
       purchase.email_dispatch_attempts === 0;
@@ -672,9 +725,11 @@ export default function AdminClient() {
     // (defense-in-depth: backend should filter, but search/race conditions can mix data)
     if (selectedEvent && purchase.event_id !== selectedEvent) return false;
 
-    // Admission filter
-    if (admissionFilter === "scanned" && !purchase.is_used) return false;
-    if (admissionFilter === "unscanned" && purchase.is_used) return false;
+    // Admission filter (aligned with scanned_count / multi-ticket rows)
+    const admissionScan = getAdmissionScanState(purchase);
+    if (admissionFilter === "scanned" && admissionScan !== "full") return false;
+    if (admissionFilter === "unscanned" && admissionScan !== "none")
+      return false;
 
     // Search query
     if (!searchQuery.trim()) return true;
@@ -1120,6 +1175,8 @@ export default function AdminClient() {
                       <TableBody>
                         {filteredPurchases.map((purchase) => {
                           const EmailIcon = getEmailButtonIcon(purchase);
+                          const recoveryRow = isTrueAbandonment(purchase);
+                          const admissionScan = getAdmissionScanState(purchase);
                           return (
                             <TableRow key={purchase.purchase_id}>
                               {/* Customer Info */}
@@ -1176,10 +1233,15 @@ export default function AdminClient() {
                               
                               {/* Admission Status */}
                               <TableCell className="text-center w-[12%]">
-                                {purchase.is_used ? (
+                                {admissionScan === "full" ? (
                                   <Badge className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 rounded-sm text-xs">
                                     <QrCode className="h-3 w-3 mr-1" />
                                     Scanned
+                                  </Badge>
+                                ) : admissionScan === "partial" ? (
+                                  <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 rounded-sm text-xs">
+                                    <ScanLine className="h-3 w-3 mr-1" />
+                                    Partially scanned
                                   </Badge>
                                 ) : (
                                   <Badge className="bg-slate-800/50 text-slate-300 border-slate-700 rounded-sm text-xs">
@@ -1190,7 +1252,14 @@ export default function AdminClient() {
 
                               {/* Payment Status */}
                               <TableCell className="text-center w-[12%]">
-                                {getPaymentStatusBadge(purchase.status)}
+                                <div className="flex flex-col items-center gap-1">
+                                  {getPaymentStatusBadge(purchase.status)}
+                                  {isTrueAbandonment(purchase) && (
+                                    <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 rounded-sm text-xs max-w-[100px] sm:max-w-none whitespace-normal sm:whitespace-nowrap">
+                                      Abandoned Cart
+                                    </Badge>
+                                  )}
+                                </div>
                               </TableCell>
 
                               {/* Email Status */}
@@ -1214,14 +1283,20 @@ export default function AdminClient() {
                                 <Button
                                   size="sm"
                                   onClick={() => openEmailDialog(purchase)}
-                                  className="rounded-sm bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                                  className={`rounded-sm text-white text-xs ${
+                                    recoveryRow
+                                      ? "bg-amber-600 hover:bg-amber-700"
+                                      : "bg-blue-600 hover:bg-blue-700"
+                                  }`}
                                   disabled={!canSendEmail(purchase)}
                                 >
                                   <EmailIcon className="h-3 w-3 mr-1" />
                                   <span className="hidden sm:inline ml-1">
                                     {getEmailButtonText(purchase)}
                                   </span>
-                                  <span className="sm:hidden">Email</span>
+                                  <span className="sm:hidden">
+                                    {recoveryRow ? "Recovery" : "Email"}
+                                  </span>
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -1349,13 +1424,24 @@ export default function AdminClient() {
             <DialogHeader>
               <DialogTitle className="text-gray-100 text-base sm:text-lg">
                 {selectedPurchase &&
-                (selectedPurchase.email_dispatch_status === "NOT_INITIATED" ||
-                  selectedPurchase.email_dispatch_attempts === 0)
-                  ? "Send Ticket Email"
-                  : "Resend Ticket Email"}
+                (() => {
+                  const recovery = isTrueAbandonment(selectedPurchase);
+                  const first =
+                    selectedPurchase.email_dispatch_status ===
+                      "NOT_INITIATED" ||
+                    selectedPurchase.email_dispatch_attempts === 0;
+                  if (recovery) {
+                    return first
+                      ? "Send Recovery Email"
+                      : "Resend Recovery Email";
+                  }
+                  return first ? "Send Ticket Email" : "Resend Ticket Email";
+                })()}
               </DialogTitle>
               <DialogDescription className="text-gray-300 text-xs sm:text-sm">
-                Update customer information and send the ticket email
+                {selectedPurchase && isTrueAbandonment(selectedPurchase)
+                  ? "Update contact details if needed, then send the abandoned checkout recovery message."
+                  : "Update customer information and send the ticket email"}
               </DialogDescription>
             </DialogHeader>
             {selectedPurchase && (
@@ -1451,6 +1537,22 @@ export default function AdminClient() {
                       <>
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                         Sending...
+                      </>
+                    ) : isTrueAbandonment(selectedPurchase) ? (
+                      <>
+                        {selectedPurchase.email_dispatch_status ===
+                          "NOT_INITIATED" ||
+                        selectedPurchase.email_dispatch_attempts === 0 ? (
+                          <>
+                            <MailWarning className="h-4 w-4 mr-2" />
+                            Send Recovery Email
+                          </>
+                        ) : (
+                          <>
+                            <MailWarning className="h-4 w-4 mr-2" />
+                            Resend Recovery Email
+                          </>
+                        )}
                       </>
                     ) : (
                       <>
