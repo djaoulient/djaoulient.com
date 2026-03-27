@@ -639,3 +639,11 @@ GRANT EXECUTE ON FUNCTION public.reset_stuck_email_dispatches() TO service_role;
 
 COMMENT ON FUNCTION public.reset_stuck_email_dispatches()
 IS 'Resets email dispatch statuses that have been stuck in DISPATCH_IN_PROGRESS for more than 10 minutes';
+
+-- Align flag for purchases that already have individual_tickets rows (e.g. guest list before issue_guest_ticket set the flag).
+UPDATE public.purchases p
+SET individual_tickets_generated = TRUE
+WHERE EXISTS (
+    SELECT 1 FROM public.individual_tickets it WHERE it.purchase_id = p.id
+)
+AND p.individual_tickets_generated = FALSE;
