@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-  useRef,
-} from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,54 +154,32 @@ declare global {
   }
 }
 
-const PIN_COOKIE_MAX_AGE = 8 * 60 * 60; // seconds
-
-function setStaffPinCookie(key: string, data: string): void {
-  if (typeof document === "undefined") return;
-  const expires = new Date();
-  expires.setTime(expires.getTime() + PIN_COOKIE_MAX_AGE * 1000);
-  const secure =
-    typeof location !== "undefined" && location.protocol === "https:"
-      ? ";Secure"
-      : "";
-  document.cookie = `${key}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;max-age=${PIN_COOKIE_MAX_AGE};SameSite=Lax${secure}`;
-}
-
 const storage = {
   set: (key: string, value: unknown): boolean => {
     const data = JSON.stringify(value);
-    let persisted = false;
-
     try {
+      // Try localStorage first (persists across browser sessions)
       localStorage.setItem(key, data);
-      persisted = true;
-    } catch {
-      // Private mode / quota — still try cookie + sessionStorage below
-    }
 
-    // Cookie must not depend on localStorage succeeding: if localStorage throws,
-    // we previously skipped the cookie entirely, so new tabs (e.g. camera → browser) lost the PIN.
-    try {
-      setStaffPinCookie(key, data);
+      // Also set document cookie for cross-app/tab persistence
+      if (typeof document !== "undefined") {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + 8 * 60 * 60 * 1000); // 8 hours
+        document.cookie = `${key}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;max-age=${8 * 60 * 60};SameSite=Lax`;
+      }
+      return true;
     } catch {
-      // ignore
-    }
-
-    if (!persisted) {
       try {
+        // Fallback to sessionStorage
         sessionStorage.setItem(key, data);
-        persisted = true;
+        return true;
       } catch {
-        try {
-          window.__staffCache = window.__staffCache || {};
-          window.__staffCache[key] = value;
-          return true;
-        } catch {
-          return false;
-        }
+        // If both fail, store in memory (less reliable but better than nothing)
+        window.__staffCache = window.__staffCache || {};
+        window.__staffCache[key] = value;
+        return true;
       }
     }
-    return true;
   },
   get: (key: string): unknown => {
     // Try cookie first as it's more reliable across sub-environments (like native camera to Safari transitions)
@@ -300,15 +272,13 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   const verifiedTicketRef = useRef<string | null>(null);
   const isVerifiedRef = useRef(false);
   const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(
-    async () => {},
+    async () => { },
   );
   /** Bumps when `ticketId` changes so slow responses cannot overwrite UI (mobile / rapid scans). */
   const verifyGenerationRef = useRef(0);
 
-  // Restore staff session from storage before paint. useLayoutEffect matters when
-  // parent uses key={id}: each new ticket remounts this tree; reading in useEffect
-  // can flash the PIN screen for one frame.
-  useLayoutEffect(() => {
+  // Check for cached PIN on component mount
+  useEffect(() => {
     const checkCachedPin = () => {
       try {
         const cached = storage.get(PIN_CACHE_KEY);
@@ -869,9 +839,8 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
       {/* Flash Feedback Overlay */}
       {flashColor && (
         <div
-          className={`fixed inset-0 pointer-events-none z-50 ${
-            flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
-          }`}
+          className={`fixed inset-0 pointer-events-none z-50 ${flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
+            }`}
           style={{ animation: "flash 0.4s ease-out" }}
         />
       )}
@@ -928,7 +897,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
                                 ticketData.remaining_tickets != null
                                   ? ticketData.remaining_tickets
                                   : (ticketData.total_quantity || 1) -
-                                    (ticketData.use_count || 0),
+                                  (ticketData.use_count || 0),
                             },
                           )}
                         </p>
@@ -937,11 +906,10 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
                   )}
                   {error && (
                     <p
-                      className={`text-sm ${
-                        errorCode === "ALREADY_USED"
-                          ? "text-muted-foreground"
-                          : "text-destructive"
-                      }`}
+                      className={`text-sm ${errorCode === "ALREADY_USED"
+                        ? "text-muted-foreground"
+                        : "text-destructive"
+                        }`}
                     >
                       {error}
                     </p>
