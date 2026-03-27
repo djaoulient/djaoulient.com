@@ -450,8 +450,8 @@
       "invalidPin": "❌ Invalid PIN. Access denied."
     },
     "warnings": {
-      "entryNotPermitted": "Entry not permitted unless customer shows proof of previous entrance",
-      "fullyUsed": "This ticket has already been used."
+      "entryNotPermitted": "Entry not permitted unless customer shows proof of previous entrance (wristband).",
+      "fullyUsed": "This ticket has already been used. Entry on wristband only."
     },
     "success": {
       "admitted": "✅ Successfully admitted!",

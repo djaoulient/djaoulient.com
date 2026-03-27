@@ -450,8 +450,8 @@
       "invalidPin": "❌ PIN invalide. Accès refusé."
     },
     "warnings": {
-      "entryNotPermitted": "Entrée non autorisée sauf si le client montre une preuve d'entrée précédente",
-      "fullyUsed": "Ce ticket a déjà été utilisé."
+      "entryNotPermitted": "Entrée non autorisée sauf si le client montre une preuve d'entrée précédente (bracelet).",
+      "fullyUsed": "Ce ticket a déjà été utilisé. Entrée sur bracelet uniquement."
     },
     "success": {
       "admitted": "✅ Admission réussie !",
