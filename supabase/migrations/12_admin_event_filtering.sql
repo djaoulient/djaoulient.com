@@ -64,7 +64,9 @@ BEGIN
 END;
 $$;
 
--- Function to get purchases filtered by event
+-- Function to get purchases filtered by event (uses admin recovery helpers from 07_admin_functions.sql)
+DROP FUNCTION IF EXISTS public.get_admin_purchases_by_event(text);
+
 CREATE OR REPLACE FUNCTION public.get_admin_purchases_by_event(
     p_event_id TEXT
 )
@@ -98,7 +100,9 @@ RETURNS TABLE(
     scanned_count BIGINT,
     is_bundle BOOLEAN,
     tickets_per_bundle INTEGER,
-    admission_total INTEGER
+    admission_total INTEGER,
+    abandonment_resolved_by_paid_order BOOLEAN,
+    recovery_email_eligible BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -156,7 +160,14 @@ BEGIN
                 ELSE
                     GREATEST(p.quantity, 1)
             END
-        )::INTEGER AS admission_total
+        )::INTEGER AS admission_total,
+        public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AS abandonment_resolved_by_paid_order,
+        (
+          p.status = 'payment_failed'
+          AND NOT public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AND public.admin_email_is_valid_for_recovery(c.email)
+        ) AS recovery_email_eligible
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     WHERE p.event_id = p_event_id
@@ -177,4 +188,4 @@ COMMENT ON FUNCTION public.get_admin_events_list(TEXT)
 IS 'Returns list of all events with purchase statistics for admin filtering based on status filter (paid/pending/failed/all), counting scanned tickets from both individual ticket system and legacy purchase-level scanning';
 
 COMMENT ON FUNCTION public.get_admin_purchases_by_event(TEXT)
-IS 'Returns purchases for one event; admission_total expands bundles for admin display.';
+IS 'Returns purchases for one event; admission_total expands bundles; abandonment_resolved_by_paid_order and recovery_email_eligible for failed checkouts.';

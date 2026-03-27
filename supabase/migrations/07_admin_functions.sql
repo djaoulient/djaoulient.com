@@ -1,7 +1,112 @@
 -- Migration: Admin Functions
 -- This adds the necessary RPC functions for the admin panel
 
--- Function to get all purchases for admin view
+-- Abandoned checkout / recovery: normalize typo domains, validate recovery addresses,
+-- detect later paid orders (same customer or normalized email) for the same event.
+CREATE OR REPLACE FUNCTION public.admin_normalize_email_for_recovery_match(p_email text)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+  e text;
+  local_part text;
+  domain_part text;
+BEGIN
+  IF p_email IS NULL THEN
+    RETURN NULL;
+  END IF;
+  e := lower(trim(p_email));
+  IF e = '' OR position('@' IN e) < 1 THEN
+    RETURN e;
+  END IF;
+  local_part := split_part(e, '@', 1);
+  domain_part := split_part(e, '@', 2);
+  domain_part := CASE lower(domain_part)
+    WHEN 'gmail.col' THEN 'gmail.com'
+    WHEN 'gmail.con' THEN 'gmail.com'
+    WHEN 'gmail.coom' THEN 'gmail.com'
+    WHEN 'gmai.com' THEN 'gmail.com'
+    WHEN 'gamil.com' THEN 'gmail.com'
+    WHEN 'gmial.com' THEN 'gmail.com'
+    WHEN 'gnail.com' THEN 'gmail.com'
+    WHEN 'hotmai.com' THEN 'hotmail.com'
+    WHEN 'hotnail.com' THEN 'hotmail.com'
+    WHEN 'yahooo.com' THEN 'yahoo.com'
+    WHEN 'yaho.com' THEN 'yahoo.com'
+    WHEN 'outlok.com' THEN 'outlook.com'
+    WHEN 'iclod.com' THEN 'icloud.com'
+    ELSE lower(domain_part)
+  END;
+  RETURN local_part || '@' || domain_part;
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_normalize_email_for_recovery_match(text)
+IS 'Lowercases email and maps common domain typos (e.g. gmail.col) for matching failed vs paid checkouts.';
+
+CREATE OR REPLACE FUNCTION public.admin_email_is_valid_for_recovery(p_email text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT
+    p_email IS NOT NULL
+    AND length(trim(p_email)) > 0
+    AND trim(p_email) ~* '^[A-Za-z0-9._+%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+    AND trim(lower(p_email)) !~ '@gmail\.col$'
+    AND trim(lower(p_email)) !~ '@gmai\.com$'
+    AND trim(lower(p_email)) !~ '@gamil\.'
+    AND trim(lower(p_email)) !~ '@gmial\.'
+    AND trim(lower(p_email)) !~ '@gnail\.'
+    AND trim(lower(p_email)) !~ '@hotnail\.'
+    AND trim(lower(p_email)) !~ '@yahooo\.'
+    AND trim(lower(p_email)) !~ '@yaho\.com$'
+    AND trim(lower(p_email)) !~ '@outlok\.'
+    AND trim(lower(p_email)) !~ '@iclod\.';
+$$;
+
+COMMENT ON FUNCTION public.admin_email_is_valid_for_recovery(text)
+IS 'FALSE for malformed or common typo domains where recovery email should not be offered.';
+
+CREATE OR REPLACE FUNCTION public.admin_purchase_has_paid_counterpart(
+  p_purchase_id uuid,
+  p_event_id text,
+  p_customer_id uuid,
+  p_customer_email text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.purchases p2
+    INNER JOIN public.customers c2 ON p2.customer_id = c2.id
+    WHERE COALESCE(TRIM(p_event_id), '') <> ''
+      AND p2.event_id = p_event_id
+      AND p2.status = 'paid'
+      AND p2.id <> p_purchase_id
+      AND (
+        p2.customer_id = p_customer_id
+        OR (
+          nullif(trim(COALESCE(c2.email, '')), '') IS NOT NULL
+          AND nullif(trim(COALESCE(p_customer_email, '')), '') IS NOT NULL
+          AND public.admin_normalize_email_for_recovery_match(c2.email)
+            = public.admin_normalize_email_for_recovery_match(p_customer_email)
+        )
+      )
+  );
+$$;
+
+COMMENT ON FUNCTION public.admin_purchase_has_paid_counterpart(uuid, text, uuid, text)
+IS 'TRUE if a different paid purchase exists for the same event for this customer or same normalized email.';
+
+DROP FUNCTION IF EXISTS public.get_admin_purchases();
+
 CREATE OR REPLACE FUNCTION public.get_admin_purchases()
 RETURNS TABLE(
     purchase_id UUID,
@@ -33,7 +138,9 @@ RETURNS TABLE(
     scanned_count BIGINT,
     is_bundle BOOLEAN,
     tickets_per_bundle INTEGER,
-    admission_total INTEGER
+    admission_total INTEGER,
+    abandonment_resolved_by_paid_order BOOLEAN,
+    recovery_email_eligible BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -91,15 +198,23 @@ BEGIN
                 ELSE
                     GREATEST(p.quantity, 1)
             END
-        )::INTEGER AS admission_total
+        )::INTEGER AS admission_total,
+        public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AS abandonment_resolved_by_paid_order,
+        (
+          p.status = 'payment_failed'
+          AND NOT public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AND public.admin_email_is_valid_for_recovery(c.email)
+        ) AS recovery_email_eligible
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     ORDER BY p.created_at DESC
-    LIMIT 100; -- Limit to prevent performance issues
+    LIMIT 100;
 END;
 $$;
 
--- Function to search purchases for admin view
+DROP FUNCTION IF EXISTS public.search_admin_purchases(text);
+
 CREATE OR REPLACE FUNCTION public.search_admin_purchases(
     p_search_query TEXT
 )
@@ -133,7 +248,9 @@ RETURNS TABLE(
     scanned_count BIGINT,
     is_bundle BOOLEAN,
     tickets_per_bundle INTEGER,
-    admission_total INTEGER
+    admission_total INTEGER,
+    abandonment_resolved_by_paid_order BOOLEAN,
+    recovery_email_eligible BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -191,7 +308,14 @@ BEGIN
                 ELSE
                     GREATEST(p.quantity, 1)
             END
-        )::INTEGER AS admission_total
+        )::INTEGER AS admission_total,
+        public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AS abandonment_resolved_by_paid_order,
+        (
+          p.status = 'payment_failed'
+          AND NOT public.admin_purchase_has_paid_counterpart(p.id, p.event_id, p.customer_id, c.email)
+          AND public.admin_email_is_valid_for_recovery(c.email)
+        ) AS recovery_email_eligible
     FROM public.purchases p
     INNER JOIN public.customers c ON p.customer_id = c.id
     WHERE
@@ -201,7 +325,7 @@ BEGIN
         LOWER(p.id::text) LIKE LOWER('%' || p_search_query || '%') OR
         LOWER(p.unique_ticket_identifier) LIKE LOWER('%' || p_search_query || '%')
     ORDER BY p.created_at DESC
-    LIMIT 50; -- Limit search results
+    LIMIT 50;
 END;
 $$;
 
@@ -349,10 +473,10 @@ GRANT EXECUTE ON FUNCTION public.export_admin_purchases_csv() TO service_role;
 
 -- Comments
 COMMENT ON FUNCTION public.get_admin_purchases()
-IS 'Admin purchases list with customer info; admission_total is quantity×tickets_per_bundle for bundles.';
+IS 'Admin purchases list; admission_total expands bundles; abandonment_resolved_by_paid_order and recovery_email_eligible for failed checkouts.';
 
 COMMENT ON FUNCTION public.search_admin_purchases(TEXT)
-IS 'Search admin purchases by customer, event, purchase id, or ticket id; includes admission_total for packs.';
+IS 'Search admin purchases by customer, event, purchase id, or ticket id; includes admission_total and abandonment / recovery flags.';
 
 COMMENT ON FUNCTION public.update_customer_for_resend(UUID, TEXT, TEXT, TEXT)
 IS 'Updates customer information when resending emails. Handles duplicate emails by merging customers with matching details.';

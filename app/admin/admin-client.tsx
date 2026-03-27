@@ -84,6 +84,59 @@ interface Purchase {
   is_bundle?: boolean;
   tickets_per_bundle?: number;
   admission_total?: number;
+  /** Set by admin SQL: another paid order exists for this event (same customer or normalized email). */
+  abandonment_resolved_by_paid_order?: boolean;
+  /** payment_failed row is eligible for recovery email (not resolved, plausible address). */
+  recovery_email_eligible?: boolean;
+}
+
+/** Mirrors admin_normalize_email_for_recovery_match for client fallback when RPC columns are absent. */
+function normalizeEmailForRecoveryMatch(
+  email: string | null | undefined,
+): string {
+  if (email == null) return "";
+  const raw = String(email).trim().toLowerCase();
+  if (!raw.includes("@")) return raw;
+  const at = raw.lastIndexOf("@");
+  const local = raw.slice(0, at);
+  const domainRaw = raw.slice(at + 1);
+  const domainMap: Record<string, string> = {
+    "gmail.col": "gmail.com",
+    "gmail.con": "gmail.com",
+    "gmail.coom": "gmail.com",
+    "gmai.com": "gmail.com",
+    "gamil.com": "gmail.com",
+    "gmial.com": "gmail.com",
+    "gnail.com": "gmail.com",
+    "hotmai.com": "hotmail.com",
+    "hotnail.com": "hotmail.com",
+    "yahooo.com": "yahoo.com",
+    "yaho.com": "yahoo.com",
+    "outlok.com": "outlook.com",
+    "iclod.com": "icloud.com",
+  };
+  const domain = domainMap[domainRaw] ?? domainRaw;
+  return `${local}@${domain}`;
+}
+
+/** Mirrors admin_email_is_valid_for_recovery (blocked typo domains). */
+function isPlausibleRecoveryEmail(email: string | null | undefined): boolean {
+  if (email == null || !String(email).trim()) return false;
+  const t = String(email).trim();
+  if (!/^[A-Za-z0-9._+%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i.test(t))
+    return false;
+  const lo = t.toLowerCase();
+  if (/@gmail\.col$/i.test(lo)) return false;
+  if (/@gmai\.com$/i.test(lo)) return false;
+  if (/@gamil\./i.test(lo)) return false;
+  if (/@gmial\./i.test(lo)) return false;
+  if (/@gnail\./i.test(lo)) return false;
+  if (/@hotnail\./i.test(lo)) return false;
+  if (/@yahooo\./i.test(lo)) return false;
+  if (/@yaho\.com$/i.test(lo)) return false;
+  if (/@outlok\./i.test(lo)) return false;
+  if (/@iclod\./i.test(lo)) return false;
+  return true;
 }
 
 function getAdmissionTotal(p: Purchase): number {
@@ -193,29 +246,55 @@ export default function AdminClient() {
   const [activeTab, setActiveTab] = useState("purchases");
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
 
-  const paidEmailEventKeys = useMemo(() => {
+  /** Legacy: match abandoned resolution by paid rows (customer_id or typo-normalized email). */
+  const paidLegacyKeys = useMemo(() => {
     const s = new Set<string>();
     for (const p of purchases) {
-      if (p.status === "paid") {
-        s.add(
-          `${String(p.customer_email ?? "")
-            .trim()
-            .toLowerCase()}::${String(p.event_id ?? "")}`,
-        );
-      }
+      if (p.status !== "paid") continue;
+      const ev = String(p.event_id ?? "");
+      s.add(`id:${p.customer_id}::${ev}`);
+      s.add(`em:${normalizeEmailForRecoveryMatch(p.customer_email)}::${ev}`);
     }
     return s;
   }, [purchases]);
 
-  const isTrueAbandonment = useCallback(
+  const isAbandonmentResolvedByPaidOrder = useCallback(
     (purchase: Purchase) => {
+      if (typeof purchase.abandonment_resolved_by_paid_order === "boolean") {
+        return purchase.abandonment_resolved_by_paid_order;
+      }
       if (purchase.status !== "payment_failed") return false;
-      const key = `${String(purchase.customer_email ?? "")
-        .trim()
-        .toLowerCase()}::${String(purchase.event_id ?? "")}`;
-      return !paidEmailEventKeys.has(key);
+      const ev = String(purchase.event_id ?? "");
+      const ne = normalizeEmailForRecoveryMatch(purchase.customer_email);
+      return (
+        paidLegacyKeys.has(`id:${purchase.customer_id}::${ev}`) ||
+        paidLegacyKeys.has(`em:${ne}::${ev}`)
+      );
     },
-    [paidEmailEventKeys],
+    [paidLegacyKeys],
+  );
+
+  /** Failed checkout with no later paid order for this event / identity (may still be non-actionable if email is a typo). */
+  const isAbandonedCartRow = useCallback(
+    (purchase: Purchase) =>
+      purchase.status === "payment_failed" &&
+      !isAbandonmentResolvedByPaidOrder(purchase),
+    [isAbandonmentResolvedByPaidOrder],
+  );
+
+  /** Show recovery email UI only when SQL (or legacy) says the address is usable. */
+  const isRecoveryEmailActionable = useCallback(
+    (purchase: Purchase) => {
+      if (typeof purchase.recovery_email_eligible === "boolean") {
+        return purchase.recovery_email_eligible;
+      }
+      return (
+        purchase.status === "payment_failed" &&
+        !isAbandonmentResolvedByPaidOrder(purchase) &&
+        isPlausibleRecoveryEmail(purchase.customer_email)
+      );
+    },
+    [isAbandonmentResolvedByPaidOrder],
   );
 
   // Helper function to format relative time
@@ -584,7 +663,7 @@ export default function AdminClient() {
         return;
       }
 
-      const isRecoverySend = isTrueAbandonment(selectedPurchase);
+      const isRecoverySend = isRecoveryEmailActionable(selectedPurchase);
 
       const { error: emailError } = await supabase.functions.invoke(
         isRecoverySend ? "send-recovery-email" : "send-ticket-email",
@@ -715,7 +794,7 @@ export default function AdminClient() {
     return (
       purchase.status === "paid" ||
       purchase.status === "pending_payment" ||
-      isTrueAbandonment(purchase)
+      isRecoveryEmailActionable(purchase)
     );
   };
 
@@ -723,7 +802,7 @@ export default function AdminClient() {
   const canShowEmailActionButton = (purchase: Purchase) => {
     if (!canSendEmail(purchase)) return false;
     if (
-      isTrueAbandonment(purchase) &&
+      isRecoveryEmailActionable(purchase) &&
       purchase.email_dispatch_status === "SENT_SUCCESSFULLY"
     )
       return false;
@@ -734,14 +813,14 @@ export default function AdminClient() {
     const isFirstTime =
       purchase.email_dispatch_status === "NOT_INITIATED" ||
       purchase.email_dispatch_attempts === 0;
-    if (isTrueAbandonment(purchase)) {
+    if (isRecoveryEmailActionable(purchase)) {
       return isFirstTime ? "Recovery Email" : "Retry Recovery";
     }
     return isFirstTime ? "Send Email" : "Resend Email";
   };
 
   const getEmailButtonIcon = (purchase: Purchase) => {
-    if (isTrueAbandonment(purchase)) return MailWarning;
+    if (isRecoveryEmailActionable(purchase)) return MailWarning;
     const isFirstTime =
       purchase.email_dispatch_status === "NOT_INITIATED" ||
       purchase.email_dispatch_attempts === 0;
@@ -1302,7 +1381,8 @@ export default function AdminClient() {
                       <TableBody>
                         {filteredPurchases.map((purchase) => {
                           const EmailIcon = getEmailButtonIcon(purchase);
-                          const recoveryRow = isTrueAbandonment(purchase);
+                          const recoveryRow =
+                            isRecoveryEmailActionable(purchase);
                           const admissionScan = getAdmissionScanState(purchase);
                           return (
                             <TableRow key={purchase.purchase_id}>
@@ -1433,7 +1513,7 @@ export default function AdminClient() {
                               {/* Payment Status */}
                               <TableCell className="text-center w-[12%]">
                                 <div className="flex flex-col items-center gap-1">
-                                  {isTrueAbandonment(purchase) ? (
+                                  {isAbandonedCartRow(purchase) ? (
                                     <Badge className="bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 rounded-sm text-xs max-w-[100px] sm:max-w-none whitespace-normal sm:whitespace-nowrap">
                                       Abandoned Cart
                                     </Badge>
@@ -1588,13 +1668,18 @@ export default function AdminClient() {
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-slate-300">
-                                {log.error_message ? (
+                                {log.success ? (
+                                  <div className="text-green-400 text-xs">
+                                    {log.error_message ||
+                                      "Verified successfully"}
+                                  </div>
+                                ) : log.error_message ? (
                                   <div className="text-red-400 text-xs">
                                     {log.error_message}
                                   </div>
                                 ) : (
                                   <div className="text-slate-500 text-xs">
-                                    Verified successfully
+                                    Verification failed
                                   </div>
                                 )}
                               </td>
@@ -1617,7 +1702,8 @@ export default function AdminClient() {
               <DialogTitle className="text-gray-100 text-base sm:text-lg">
                 {selectedPurchase &&
                   (() => {
-                    const recovery = isTrueAbandonment(selectedPurchase);
+                    const recovery =
+                      isRecoveryEmailActionable(selectedPurchase);
                     const first =
                       selectedPurchase.email_dispatch_status ===
                         "NOT_INITIATED" ||
@@ -1629,7 +1715,7 @@ export default function AdminClient() {
                   })()}
               </DialogTitle>
               <DialogDescription className="text-gray-300 text-xs sm:text-sm">
-                {selectedPurchase && isTrueAbandonment(selectedPurchase)
+                {selectedPurchase && isRecoveryEmailActionable(selectedPurchase)
                   ? "Update contact details if needed, then send the abandoned checkout recovery message."
                   : "Update customer information and send the ticket email"}
               </DialogDescription>
@@ -1728,7 +1814,7 @@ export default function AdminClient() {
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                         Sending...
                       </>
-                    ) : isTrueAbandonment(selectedPurchase) ? (
+                    ) : isRecoveryEmailActionable(selectedPurchase) ? (
                       <>
                         <MailWarning className="h-4 w-4 mr-2" />
                         Send Recovery Email
