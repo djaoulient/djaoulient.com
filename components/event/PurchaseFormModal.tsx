@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,32 +15,28 @@ import DjaouliCodeDialog from "@/components/landing/djaouli-code";
 import { useIsMobile } from "@/lib/utils/use-is-mobile";
 
 const PURCHASE_MODAL_PORTAL_ID = "purchase-modal-portal";
-const ANIMATION_DURATION_MS = 300;
 
 // Helper function for formatting price (matching event page)
 const formatPrice = (price: number): string => {
-  // Use non-breaking space (\u00A0) for thousands separator
   return price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
 };
 
-// Define the shape of the ticket/bundle item passed to the modal
 interface PurchaseItem {
-  id: string; // Sanity _key or bundleId.current
+  id: string;
   name: string;
   price: number;
   isBundle: boolean;
   maxPerOrder?: number;
   stock?: number | null;
   productId?: string;
-  ticketsIncluded?: number; // Number of tickets included per bundle
+  ticketsIncluded?: number;
 }
 
-// Define the expected payload for the Supabase function
 interface CreateCheckoutSessionPayload {
   eventId: string;
   eventTitle: string;
-  ticketTypeId: string; // Corresponds to PurchaseItem.id
-  ticketName: string; // Corresponds to PurchaseItem.name
+  ticketTypeId: string;
+  ticketName: string;
   pricePerTicket: number;
   quantity: number;
   currencyCode?: string;
@@ -55,7 +51,6 @@ interface CreateCheckoutSessionPayload {
   eventDateText?: string;
   eventTimeText?: string;
   eventVenueName?: string;
-  // Bundle-specific fields
   isBundle?: boolean;
   ticketsPerBundle?: number;
 }
@@ -65,13 +60,13 @@ interface PurchaseFormModalProps {
   onClose: () => void;
   item: PurchaseItem | null;
   eventDetails: {
-    id: string; // Event Sanity _id
+    id: string;
     title: string;
     dateText?: string;
     timeText?: string;
     venueName?: string;
   };
-  supabaseClient: SupabaseClient; // Pass the Supabase client instance
+  supabaseClient: SupabaseClient;
 }
 
 export default function PurchaseFormModal({
@@ -92,19 +87,21 @@ export default function PurchaseFormModal({
   const [error, setError] = useState<string | null>(null);
   const [showDjaouliCode, setShowDjaouliCode] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const portalContainerRef = useRef<HTMLElement | null>(null);
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(null);
+  const [mobileVisibleHeight, setMobileVisibleHeight] = useState<number | null>(
+    null,
+  );
 
-  // Ensure component is mounted and create dedicated portal container for consistent stacking/animation on desktop
   useEffect(() => {
     setIsMounted(true);
     if (typeof document !== "undefined") {
-      let portalContainer = document.getElementById(PURCHASE_MODAL_PORTAL_ID);
-      if (!portalContainer) {
-        portalContainer = document.createElement("div");
-        portalContainer.id = PURCHASE_MODAL_PORTAL_ID;
-        document.body.appendChild(portalContainer);
+      let el = document.getElementById(PURCHASE_MODAL_PORTAL_ID);
+      if (!el) {
+        el = document.createElement("div");
+        el.id = PURCHASE_MODAL_PORTAL_ID;
+        document.body.appendChild(el);
       }
-      portalContainerRef.current = portalContainer;
+      setPortalNode(el);
     }
     return () => setIsMounted(false);
   }, []);
@@ -126,53 +123,95 @@ export default function PurchaseFormModal({
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    if (item) {
-      setQuantity(1); // Reset quantity when item changes
-      setQuantityDisplay("1"); // Reset display value too
-      setError(null); // Reset error
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
 
-      // Only show djaouli code dialog if user hasn't seen it before
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof window === "undefined") {
+      setMobileVisibleHeight(null);
+      return;
+    }
+    const vv = window.visualViewport;
+    const apply = () => {
+      setMobileVisibleHeight(
+        vv ? Math.round(vv.height) : Math.round(window.innerHeight),
+      );
+    };
+    apply();
+    if (vv) {
+      vv.addEventListener("resize", apply);
+      vv.addEventListener("scroll", apply);
+      return () => {
+        vv.removeEventListener("resize", apply);
+        vv.removeEventListener("scroll", apply);
+      };
+    }
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [isOpen, isMobile]);
+
+  const scrollActiveFieldIntoView = useCallback(() => {
+    if (!isMobile) return;
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const el = document.activeElement;
+        if (el instanceof HTMLElement && el.tagName !== "BODY") {
+          el.scrollIntoView({
+            block: "center",
+            behavior: "instant",
+            inline: "nearest",
+          });
+        }
+      }, 120);
+    });
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (item) {
+      setQuantity(1);
+      setQuantityDisplay("1");
+      setError(null);
+
       const hasSeenDjaouliCode =
         localStorage.getItem("djaouli-code-shown") === "true";
       if (!hasSeenDjaouliCode) {
-        setShowDjaouliCode(true); // Show djaouli code dialog only first time
+        setShowDjaouliCode(true);
       }
     }
   }, [item]);
 
   useEffect(() => {
     if (!isOpen) {
-      setShowDjaouliCode(false); // Hide djaouli code dialog when modal closes
+      setShowDjaouliCode(false);
     }
   }, [isOpen]);
 
   if (!item) return null;
 
-  // Refined maxQuantity calculation
   const stockLimit =
     item.stock !== null && item.stock !== undefined && item.stock >= 0
       ? item.stock
       : Infinity;
   const orderLimit = item.maxPerOrder || Infinity;
   const calculatedMax = Math.min(stockLimit, orderLimit);
-  // If the item is available (modal is open), stock should be > 0 or unlimited.
-  // Thus, calculatedMax should be > 0 or Infinity.
-  // Default to 20 if no other limits are effectively set.
   const maxQuantity =
     calculatedMax === Infinity || calculatedMax === 0 ? 20 : calculatedMax;
 
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // Allow empty string for better UX (user can clear and type new number)
     if (value === "") {
       setQuantityDisplay("");
       return;
     }
 
-    // Only allow numeric input
     if (!/^\d+$/.test(value)) {
-      return; // Don't update if not a valid number
+      return;
     }
 
     const parsedValue = parseInt(value, 10);
@@ -180,14 +219,11 @@ export default function PurchaseFormModal({
       return;
     }
 
-    // Update display immediately
     setQuantityDisplay(value);
 
-    // Clamp the value between 1 and maxQuantity for the actual quantity
     const clampedValue = Math.max(1, Math.min(parsedValue, maxQuantity));
     setQuantity(clampedValue);
 
-    // If the parsed value exceeds limits, update display to show the clamped value
     if (parsedValue !== clampedValue) {
       setTimeout(() => setQuantityDisplay(clampedValue.toString()), 0);
     }
@@ -199,7 +235,6 @@ export default function PurchaseFormModal({
       setQuantity(1);
       setQuantityDisplay("1");
     } else {
-      // Ensure display matches the actual quantity
       setQuantityDisplay(quantity.toString());
     }
   };
@@ -283,17 +318,16 @@ export default function PurchaseFormModal({
       quantity: quantity,
       userName: userName.trim(),
       userEmail: userEmail.trim(),
-      userPhone: userPhone || undefined, // Send phone number properly formatted
-      currencyCode: "XOF", // Assuming XOF, make dynamic if needed
-      successUrlPath: "/payment/success", // Or from config
-      cancelUrlPath: "/payment/cancel", // Or from config
+      userPhone: userPhone || undefined,
+      currencyCode: "XOF",
+      successUrlPath: "/payment/success",
+      cancelUrlPath: "/payment/cancel",
       productId: item.productId,
-      allowCouponCode: true, // Enable coupon codes by default
+      allowCouponCode: true,
       allowQuantity: shouldAllowQuantity,
       eventDateText: eventDetails.dateText,
       eventTimeText: eventDetails.timeText,
       eventVenueName: eventDetails.venueName,
-      // Bundle-specific fields
       isBundle: item.isBundle,
       ticketsPerBundle: item.ticketsIncluded || 1,
     };
@@ -301,7 +335,6 @@ export default function PurchaseFormModal({
     let successfullyInitiatedRedirect = false;
 
     try {
-      // Note: Ensure your Supabase function is named 'create-lomi-checkout-session'
       const { data, error: functionError } =
         await supabaseClient.functions.invoke("create-lomi-checkout-session", {
           body: payload,
@@ -337,20 +370,18 @@ export default function PurchaseFormModal({
       }
       setError(message);
     } finally {
-      // Only set isLoading to false if there was an error and we are not redirecting
       if (!successfullyInitiatedRedirect) {
         setIsLoading(false);
       }
     }
   };
 
-  // Helper function to check if form is valid
   const isFormValid = () => {
     return (
       userName.trim().length > 0 &&
       userEmail.trim().length > 0 &&
       validateEmail(userEmail) &&
-      userPhone.trim().length > 4 && // Phone is now required
+      userPhone.trim().length > 4 &&
       quantity > 0
     );
   };
@@ -360,24 +391,19 @@ export default function PurchaseFormModal({
     ? quantity * (item.ticketsIncluded || 1)
     : quantity;
 
-  // Only render portal content if mounted and we have a portal container
-  if (!isMounted || !portalContainerRef.current) return null;
+  if (!isMounted || !portalNode) return null;
 
   return createPortal(
     <>
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop - stable key for reliable exit animation on desktop */}
             <motion.div
               key="purchase-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{
-                duration: ANIMATION_DURATION_MS / 1000,
-                ease: "easeInOut",
-              }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
               className="fixed inset-0 z-[60] bg-foreground/30 will-change-auto cursor-pointer"
               onClick={(e) => {
                 e.preventDefault();
@@ -394,7 +420,6 @@ export default function PurchaseFormModal({
               }}
             />
 
-            {/* Panel - slides from bottom on mobile, from right on desktop */}
             <motion.div
               key="purchase-panel"
               {...(isMobile
@@ -409,26 +434,38 @@ export default function PurchaseFormModal({
                     exit: { x: "100%" },
                   })}
               transition={{
-                duration: ANIMATION_DURATION_MS / 1000,
-                ease: "easeInOut",
+                duration: isMobile ? 0.22 : 0.3,
+                ease: isMobile ? [0.32, 0.72, 0, 1] : "easeInOut",
               }}
-              className={`fixed z-[70] will-change-transform pointer-events-auto ${
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="purchase-modal-title"
+              className={`fixed z-[70] will-change-transform pointer-events-auto overscroll-contain flex flex-col ${
                 isMobile
-                  ? "inset-x-0 bottom-0 flex w-full"
-                  : "top-0 bottom-0 right-0 flex w-full md:w-[500px]"
+                  ? "inset-x-0 bottom-0 w-full max-h-[100dvh]"
+                  : "top-0 bottom-0 right-0 w-full md:w-[500px] md:p-4"
               }`}
               style={
                 isMobile
                   ? { position: "fixed", left: 0, right: 0, bottom: 0 }
                   : { position: "fixed", top: 0, right: 0, bottom: 0 }
               }
-              onClick={(e) => e.stopPropagation()} // Prevent event bubbling to backdrop
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex flex-col w-full h-[70vh] md:h-full min-h-0 bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-none shadow-2xl p-4">
-                {/* Header */}
-                <div className="flex items-start py-4 md:py-6 flex-shrink-0">
+              <div
+                className="flex flex-col w-full min-h-0 bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl p-4 md:h-full md:min-h-0 h-[min(96dvh,100%)]"
+                style={
+                  isMobile && mobileVisibleHeight != null
+                    ? { maxHeight: mobileVisibleHeight }
+                    : undefined
+                }
+              >
+                <div className="flex items-start py-3 md:py-6 flex-shrink-0">
                   <div>
-                    <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+                    <h2
+                      id="purchase-modal-title"
+                      className="text-2xl md:text-3xl font-bold text-foreground"
+                    >
                       {t(currentLanguage, "purchaseModal.title")}
                     </h2>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -437,36 +474,68 @@ export default function PurchaseFormModal({
                   </div>
                 </div>
 
-                {/* Form Content */}
-                <div className="flex-1 overflow-y-auto min-h-0">
-                  <form onSubmit={handleSubmit} className="space-y-6 py-2">
-                    {/* Item Details */}
-                    <div className="bg-muted/30 p-4 rounded-sm">
-                      <h4 className="font-medium text-base">{item.name}</h4>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        {formatPrice(item.price)}
-                        {t(
-                          currentLanguage,
-                          "eventSlugPage.tickets.currencySuffix",
-                        )}
-                        {item.isBundle && (
-                          <span className="ml-3 text-sm bg-primary/20 text-primary px-3 py-1 rounded-sm font-medium">
-                            {item.ticketsIncluded || 1} tickets
-                          </span>
-                        )}
-                      </p>
+                <div className="flex-1 overflow-y-auto min-h-0 overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+                  <form
+                    id="purchase-checkout-form"
+                    onSubmit={handleSubmit}
+                    className="space-y-5 md:space-y-6 py-1 md:py-2"
+                  >
+                    <div className="bg-muted/30 p-3 rounded-sm">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-medium text-sm">{item.name}</h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatPrice(item.price)}
+                            {t(
+                              currentLanguage,
+                              "eventSlugPage.tickets.currencySuffix",
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {item.isBundle && (
+                            <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-sm">
+                              {t(currentLanguage, "purchaseModal.bundleBadge", {
+                                count: item.ticketsIncluded || 1,
+                              })}
+                            </span>
+                          )}
+                          {!item.isBundle &&
+                            item.stock !== null &&
+                            item.stock !== undefined &&
+                            item.stock > 0 && (
+                              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted/50 text-muted-foreground">
+                                {t(currentLanguage, "purchaseModal.only")}{" "}
+                                {item.stock}{" "}
+                                {item.stock === 1
+                                  ? t(
+                                      currentLanguage,
+                                      "purchaseModal.available",
+                                    )
+                                  : t(
+                                      currentLanguage,
+                                      "purchaseModal.availablePlural",
+                                    )}
+                              </span>
+                            )}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Name Field */}
-                    <div className="space-y-3">
-                      <Label htmlFor="name" className="text-sm font-medium">
+                    <div className="space-y-2">
+                      <Label htmlFor="name" className="text-sm">
                         {t(currentLanguage, "purchaseModal.labels.name")}
                       </Label>
                       <Input
                         id="name"
+                        name="name"
                         value={userName}
                         onChange={(e) => setUserName(e.target.value)}
-                        className="rounded-sm h-12 text-base px-4 mt-2"
+                        onFocus={scrollActiveFieldIntoView}
+                        autoComplete="name"
+                        enterKeyHint="next"
+                        autoCapitalize="words"
+                        className="rounded-sm min-h-11 text-base md:h-9 md:min-h-0 md:text-sm mt-2"
                         placeholder={t(
                           currentLanguage,
                           "purchaseModal.placeholders.name",
@@ -475,17 +544,21 @@ export default function PurchaseFormModal({
                       />
                     </div>
 
-                    {/* Email Field */}
-                    <div className="space-y-3">
-                      <Label htmlFor="email" className="text-sm font-medium">
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-sm">
                         {t(currentLanguage, "purchaseModal.labels.email")}
                       </Label>
                       <Input
                         id="email"
+                        name="email"
                         type="email"
                         value={userEmail}
                         onChange={(e) => setUserEmail(e.target.value)}
-                        className="rounded-sm h-12 text-base px-4 mt-2"
+                        onFocus={scrollActiveFieldIntoView}
+                        autoComplete="email"
+                        enterKeyHint="next"
+                        inputMode="email"
+                        className="rounded-sm min-h-11 text-base md:h-9 md:min-h-0 md:text-sm mt-2"
                         placeholder={t(
                           currentLanguage,
                           "purchaseModal.placeholders.email",
@@ -494,48 +567,50 @@ export default function PurchaseFormModal({
                       />
                     </div>
 
-                    {/* Phone Field */}
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">
+                    <div
+                      className="space-y-2"
+                      onFocusCapture={scrollActiveFieldIntoView}
+                    >
+                      <Label className="text-sm">
                         {t(currentLanguage, "purchaseModal.labels.phone")}
                       </Label>
-                      <div className="h-12">
-                        <PhoneNumberInput
-                          value={userPhone}
-                          onChange={(value) => setUserPhone(value || "")}
-                          className="rounded-sm h-12 text-base mt-2"
-                          placeholder={t(
-                            currentLanguage,
-                            "purchaseModal.placeholders.phone",
-                          )}
-                        />
-                      </div>
+                      <PhoneNumberInput
+                        value={userPhone}
+                        onChange={(value) => setUserPhone(value || "")}
+                        className="rounded-sm h-9 text-sm mt-2"
+                        placeholder={t(
+                          currentLanguage,
+                          "purchaseModal.placeholders.phone",
+                        )}
+                      />
                     </div>
 
-                    {/* Quantity Field */}
-                    <div className="space-y-3">
-                      <Label htmlFor="quantity" className="text-sm font-medium">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity" className="text-sm">
                         {t(currentLanguage, "purchaseModal.labels.quantity")}
                       </Label>
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           onClick={handleQuantityDecrement}
                           disabled={quantity <= 1}
-                          className="rounded-sm h-12 w-12 p-0 mt-2"
+                          className="rounded-sm min-h-11 min-w-11 h-11 w-11 shrink-0 p-0 mt-2 md:h-9 md:min-h-0 md:min-w-0 md:w-9"
                         >
-                          <Minus className="h-4 w-4" />
+                          <Minus className="h-3 w-3" />
                         </Button>
                         <Input
                           id="quantity"
+                          name="quantity"
                           type="text"
                           inputMode="numeric"
                           value={quantityDisplay}
                           onChange={handleQuantityChange}
                           onBlur={handleQuantityBlur}
-                          className="rounded-sm h-12 text-base text-center flex-1"
+                          onFocus={scrollActiveFieldIntoView}
+                          enterKeyHint="done"
+                          className="rounded-sm min-h-11 text-base text-center flex-1 md:h-9 md:min-h-0 md:text-sm mt-2"
                           required
                         />
                         <Button
@@ -544,27 +619,25 @@ export default function PurchaseFormModal({
                           size="sm"
                           onClick={handleQuantityIncrement}
                           disabled={quantity >= maxQuantity}
-                          className="rounded-sm h-12 w-12 p-0"
+                          className="rounded-sm min-h-11 min-w-11 h-11 w-11 shrink-0 p-0 mt-2 md:h-9 md:min-h-0 md:min-w-0 md:w-9"
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
 
-                    {/* Error Display */}
                     {error && (
-                      <div className="text-sm text-red-400 text-center px-4 py-3 bg-red-900/20 rounded-sm border border-red-700/50">
+                      <div className="text-xs text-red-400 text-center px-3 py-2 bg-red-900/20 rounded-sm border border-red-700/50 mt-2">
                         {error}
                       </div>
                     )}
 
-                    {/* Total Price */}
-                    <div className="pt-4 border-t border-border mt-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-base text-muted-foreground font-medium">
+                    <div className="pt-3 border-t border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">
                           {t(currentLanguage, "purchaseModal.totalPrice")}
                         </span>
-                        <span className="text-primary font-bold text-xl">
+                        <span className="text-primary font-semibold">
                           {formatPrice(totalPrice)}
                           {t(
                             currentLanguage,
@@ -574,13 +647,13 @@ export default function PurchaseFormModal({
                       </div>
                       {item.isBundle && (
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t(
                               currentLanguage,
                               "purchaseModal.ticketsGenerated",
                             )}
                           </span>
-                          <span className="text-sm font-medium">
+                          <span className="text-xs font-medium">
                             {actualTicketCount}
                           </span>
                         </div>
@@ -589,18 +662,20 @@ export default function PurchaseFormModal({
                   </form>
                 </div>
 
-                {/* Footer with Submit Button */}
-                <div className="px-3 md:px-4 py-4 border-t border-border flex-shrink-0">
+                <div className="px-3 md:px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-4 border-t border-border flex-shrink-0">
                   <Button
                     type="submit"
+                    form="purchase-checkout-form"
                     disabled={isLoading || !isFormValid()}
-                    onClick={handleSubmit}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm md:text-base w-full font-semibold h-11 md:h-12 flex items-center justify-center gap-2"
+                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm w-full font-medium min-h-11 h-11 md:h-10 md:min-h-0"
                   >
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {t(currentLanguage, "purchaseModal.buttons.processing")}
+                        {t(
+                          currentLanguage,
+                          "purchaseModal.buttons.processing",
+                        )}
                       </>
                     ) : (
                       <>
@@ -616,12 +691,11 @@ export default function PurchaseFormModal({
         )}
       </AnimatePresence>
 
-      {/* Djaouli Code Dialog - shows as disclaimer when purchase modal opens */}
       <DjaouliCodeDialog
         isOpen={showDjaouliCode}
         onClose={() => setShowDjaouliCode(false)}
       />
     </>,
-    portalContainerRef.current,
+    portalNode,
   );
 }

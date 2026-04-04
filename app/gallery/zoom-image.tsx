@@ -29,6 +29,14 @@ export function ZoomImage({
     }
   }, [initialIndex]);
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   const handleClose = () => {
     setZoomedIndex(null);
     onClose();
@@ -42,7 +50,10 @@ export function ZoomImage({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 p-4 flex flex-col overflow-x-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label={sectionTitle ? `Gallery: ${sectionTitle}` : "Gallery zoom"}
+      className="fixed inset-0 z-[80] bg-black/90 pt-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex flex-col overflow-x-hidden overscroll-contain"
       onClick={handleClose}
     >
       {sectionTitle && (
@@ -51,7 +62,7 @@ export function ZoomImage({
         </div>
       )}
       {/* Scrollable vertical column of images */}
-      <div className="mx-auto max-w-5xl w-full flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-5xl w-full flex-1 min-h-0 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
         <div className="flex flex-col items-center gap-8 py-4">
           {images.map((img, index) => {
             const numericWidth = parseInt(img.width, 10);

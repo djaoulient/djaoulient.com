@@ -276,7 +276,11 @@
   "purchaseModal": {
     "title": "Acheter des tickets",
     "description": "Entrez vos coordonnées pour acheter des tickets.",
+    "only": "Seulement",
+    "available": "disponible",
+    "availablePlural": "disponibles",
     "includesTickets": "Inclut {count} ticket(s)",
+    "bundleBadge": "{count} billets",
     "ticketsGenerated": "Tickets à générer",
     "labels": {
       "quantity": "Quantité",
@@ -301,6 +305,8 @@
       "emailRequired": "L'e-mail est requis.",
       "emailInvalid": "Veuillez entrer une adresse e-mail valide.",
       "quantityInvalid": "La quantité doit être d'au moins 1.",
+      "quantityExceedsMax": "Vous pouvez commander au maximum {max} billets.",
+      "quantityExceedsStock": "Il ne reste que {stock} billet(s).",
       "functionError": "Impossible d'initier le paiement. Veuillez réessayer.",
       "lomiUrlMissing": "URL de paiement non reçue. Veuillez réessayer.",
       "submitError": "Une erreur est survenue. Veuillez réessayer."

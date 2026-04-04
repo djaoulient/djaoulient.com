@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/actions/utils";
 import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { t } from "@/lib/i18n/translations";
 import { useTheme } from "@/lib/contexts/ThemeContext";
+import { useIsMobile } from "@/lib/utils/use-is-mobile";
 
 const CartContainer = ({
   children,
@@ -27,11 +28,28 @@ export default function CartPurchaseForm() {
   const { cart } = useCart();
   const { currentLanguage } = useTranslation();
   const { button } = useTheme();
+  const isMobile = useIsMobile();
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userPhone, setUserPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const scrollActiveFieldIntoView = useCallback(() => {
+    if (!isMobile) return;
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const el = document.activeElement;
+        if (el instanceof HTMLElement && el.tagName !== "BODY") {
+          el.scrollIntoView({
+            block: "center",
+            behavior: "instant",
+            inline: "nearest",
+          });
+        }
+      }, 120);
+    });
+  }, [isMobile]);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,14 +85,12 @@ export default function CartPurchaseForm() {
     setIsLoading(true);
 
     try {
-      // Prepare cart items for the API
       const cartItems = cart.lines.map((line) => ({
         merchandiseId: line.id,
         quantity: line.quantity,
-        productId: undefined, // Products no longer have lomi productId - direct charges only
+        productId: undefined,
         title: line.product.name,
         price: line.product.price,
-        // Shipping is sent as orderShipping (one per order); backend uses that for total.
         shippingFee: 0,
       }));
 
@@ -129,7 +145,7 @@ export default function CartPurchaseForm() {
   const totalAmount = cart?.cost.totalAmount.amount || "0";
 
   return (
-    <div className="flex flex-col justify-between h-full overflow-hidden">
+    <div className="flex flex-col justify-between h-full overflow-hidden min-h-0">
       <CartContainer className="flex justify-between items-center px-2 text-sm text-muted-foreground mb-4">
         <span className="font-medium">
           {t(currentLanguage, "cartPurchaseForm.title")}
@@ -145,18 +161,27 @@ export default function CartPurchaseForm() {
         </span>
       </CartContainer>
 
-      <div className="relative flex-1 min-h-0 py-4 overflow-y-auto">
+      <div className="relative flex-1 min-h-0 py-4 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
         <CartContainer>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-6">
-              <Label htmlFor="name" className="text-sm font-medium">
+          <form
+            id="cart-checkout-form"
+            onSubmit={handleSubmit}
+            className="space-y-5 md:space-y-6"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="cart-name" className="text-sm font-medium">
                 {t(currentLanguage, "cartPurchaseForm.labels.name")} *
               </Label>
               <Input
-                id="name"
+                id="cart-name"
+                name="name"
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                className="rounded-sm mt-2"
+                onFocus={scrollActiveFieldIntoView}
+                autoComplete="name"
+                enterKeyHint="next"
+                autoCapitalize="words"
+                className="rounded-sm min-h-11 text-base md:h-9 md:min-h-0 md:text-sm mt-2"
                 placeholder={t(
                   currentLanguage,
                   "cartPurchaseForm.placeholders.name",
@@ -165,16 +190,21 @@ export default function CartPurchaseForm() {
               />
             </div>
 
-            <div className="space-y-6">
-              <Label htmlFor="email" className="text-sm font-medium">
+            <div className="space-y-2">
+              <Label htmlFor="cart-email" className="text-sm font-medium">
                 {t(currentLanguage, "cartPurchaseForm.labels.email")} *
               </Label>
               <Input
-                id="email"
+                id="cart-email"
+                name="email"
                 type="email"
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.target.value)}
-                className="rounded-sm mt-2"
+                onFocus={scrollActiveFieldIntoView}
+                autoComplete="email"
+                enterKeyHint="next"
+                inputMode="email"
+                className="rounded-sm min-h-11 text-base md:h-9 md:min-h-0 md:text-sm mt-2"
                 placeholder={t(
                   currentLanguage,
                   "cartPurchaseForm.placeholders.email",
@@ -183,14 +213,17 @@ export default function CartPurchaseForm() {
               />
             </div>
 
-            <div className="space-y-6">
+            <div
+              className="space-y-2"
+              onFocusCapture={scrollActiveFieldIntoView}
+            >
               <Label className="text-sm font-medium">
                 {t(currentLanguage, "cartPurchaseForm.labels.phone")} *
               </Label>
               <PhoneNumberInput
                 value={userPhone}
                 onChange={(value) => setUserPhone(value || "")}
-                className="mt-2"
+                className="rounded-sm h-9 text-sm mt-2"
                 placeholder={t(
                   currentLanguage,
                   "cartPurchaseForm.placeholders.phone",
@@ -204,8 +237,7 @@ export default function CartPurchaseForm() {
               </div>
             )}
           </form>
-          {/* Mobile spacing below form fields */}
-          <div className="md:hidden h-6"></div>
+          <div className="md:hidden h-6" />
         </CartContainer>
       </div>
 
@@ -239,17 +271,17 @@ export default function CartPurchaseForm() {
           </CartContainer>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 pb-[max(0px,env(safe-area-inset-bottom))] md:pb-0">
           <Button
             type="submit"
-            onClick={handleSubmit}
+            form="cart-checkout-form"
             disabled={
               isLoading ||
               !userName.trim() ||
               !userEmail.trim() ||
               !userPhone.trim()
             }
-            className={`w-full ${button.secondary} rounded-sm font-semibold h-9`}
+            className={`w-full ${button.secondary} rounded-sm font-semibold min-h-11 h-11 md:h-9 md:min-h-0`}
           >
             {isLoading ? (
               <>

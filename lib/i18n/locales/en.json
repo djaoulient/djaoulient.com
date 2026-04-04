@@ -276,7 +276,11 @@
   "purchaseModal": {
     "title": "Purchase tickets",
     "description": "Enter your details to purchase tickets.",
+    "only": "Only",
+    "available": "available",
+    "availablePlural": "available",
     "includesTickets": "Includes {count} ticket(s)",
+    "bundleBadge": "{count} tickets",
     "ticketsGenerated": "Tickets to be generated",
     "labels": {
       "quantity": "Quantity",
@@ -301,6 +305,8 @@
       "emailRequired": "Email is required.",
       "emailInvalid": "Please enter a valid email address.",
       "quantityInvalid": "Quantity must be at least 1.",
+      "quantityExceedsMax": "You can order at most {max} tickets.",
+      "quantityExceedsStock": "Only {stock} tickets left in stock.",
       "functionError": "Could not initiate payment. Please try again.",
       "lomiUrlMissing": "Payment URL not received. Please try again.",
       "submitError": "An error occurred. Please try again."

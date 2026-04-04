@@ -221,21 +221,19 @@ export default function CheckoutButton({
             )}
             {buttonText}
           </Button>
-          {isModalOpen && (
-            <PurchaseFormModal
-              isOpen={isModalOpen}
-              onClose={() => setIsModalOpen(false)}
-              item={purchaseItemForModal}
-              eventDetails={{
-                id: eventDetails.id,
-                title: eventDetails.title,
-                dateText: eventDetails.dateText,
-                timeText: eventDetails.timeText,
-                venueName: eventDetails.venueName,
-              }}
-              supabaseClient={supabase}
-            />
-          )}
+          <PurchaseFormModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            item={purchaseItemForModal}
+            eventDetails={{
+              id: eventDetails.id,
+              title: eventDetails.title,
+              dateText: eventDetails.dateText,
+              timeText: eventDetails.timeText,
+              venueName: eventDetails.venueName,
+            }}
+            supabaseClient={supabase}
+          />
         </>
       );
     } else {

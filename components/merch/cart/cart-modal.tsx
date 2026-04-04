@@ -58,7 +58,7 @@ const CartItems = ({
         </span>
       </CartContainer>
       <div className="relative flex-1 min-h-0 py-4 overflow-x-hidden">
-        <CartContainer className="overflow-y-auto flex flex-col gap-y-3 h-full scrollbar-hide">
+        <CartContainer className="overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] flex flex-col gap-y-3 h-full scrollbar-hide">
           <AnimatePresence>
             {cart.lines.map((item, i) => (
               <motion.div
@@ -191,6 +191,9 @@ export default function CartModal() {
   const [isMounted, setIsMounted] = useState(false);
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [shouldRenderPortal, setShouldRenderPortal] = useState(false);
+  const [mobileVisibleHeight, setMobileVisibleHeight] = useState<number | null>(
+    null,
+  );
   const serializedCart = useRef(cart ? serializeCart(cart) : undefined);
   const instanceIdRef = useRef<string>(
     `cart-${Math.random().toString(36).substring(7)}`,
@@ -319,6 +322,39 @@ export default function CartModal() {
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof window === "undefined") {
+      setMobileVisibleHeight(null);
+      return;
+    }
+    const vv = window.visualViewport;
+    const apply = () => {
+      setMobileVisibleHeight(
+        vv ? Math.round(vv.height) : Math.round(window.innerHeight),
+      );
+    };
+    apply();
+    if (vv) {
+      vv.addEventListener("resize", apply);
+      vv.addEventListener("scroll", apply);
+      return () => {
+        vv.removeEventListener("resize", apply);
+        vv.removeEventListener("scroll", apply);
+      };
+    }
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [isOpen, isMobile]);
+
   const closeCart = () => {
     setIsOpen(false);
     setShowPurchaseForm(false);
@@ -331,7 +367,7 @@ export default function CartModal() {
         activePortalInstance = null;
         setShouldRenderPortal(false);
       }
-    }, 300);
+    }, 350);
   };
 
   const renderCartContent = () => {
@@ -415,7 +451,7 @@ export default function CartModal() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3, ease: "easeInOut" }}
-                  className="fixed inset-0 z-60 bg-foreground/30 will-change-auto"
+                  className="fixed inset-0 z-[60] bg-foreground/30 will-change-auto"
                   onClick={closeCart}
                   aria-hidden="true"
                   style={{
@@ -441,12 +477,18 @@ export default function CartModal() {
                         animate: { x: 0 },
                         exit: { x: "100%" },
                       })}
-                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                  transition={{
+                    duration: isMobile ? 0.22 : 0.3,
+                    ease: isMobile ? [0.32, 0.72, 0, 1] : "easeInOut",
+                  }}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="cart-modal-title"
                   className={cn(
-                    "fixed z-70 will-change-transform flex w-full",
+                    "fixed z-[70] will-change-transform overscroll-contain flex flex-col w-full",
                     isMobile
-                      ? "inset-x-0 bottom-0"
-                      : "top-0 bottom-0 right-0 md:w-[500px]",
+                      ? "inset-x-0 bottom-0 max-h-[100dvh]"
+                      : "top-0 bottom-0 right-0 md:w-[500px] md:p-4",
                   )}
                   style={
                     isMobile
@@ -455,16 +497,28 @@ export default function CartModal() {
                   }
                   onClick={(e) => e.stopPropagation()} // Prevent event bubbling to cart button
                 >
-                  <div className="flex flex-col py-4 px-2 md:px-4 w-full bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl max-h-[70vh] md:max-h-none">
-                    <CartContainer className="flex justify-between items-center mb-8">
+                  <div
+                    className="flex flex-col py-4 px-2 md:px-4 w-full min-h-0 bg-[#1a1a1a] backdrop-blur-xl rounded-t-xl md:rounded-sm shadow-2xl h-[min(96dvh,100%)] md:h-full md:max-h-none"
+                    style={
+                      isMobile && mobileVisibleHeight != null
+                        ? { maxHeight: mobileVisibleHeight }
+                        : undefined
+                    }
+                  >
+                    <CartContainer className="flex justify-between items-center mb-6 md:mb-8">
                       <div>
-                        <h2 className="text-3xl font-bold text-foreground">
+                        <h2
+                          id="cart-modal-title"
+                          className="text-2xl md:text-3xl font-bold text-foreground"
+                        >
                           {t(currentLanguage, "cartModal.cart")}
                         </h2>
                       </div>
                     </CartContainer>
 
-                    {renderCartContent()}
+                    <div className="flex flex-col flex-1 min-h-0">
+                      {renderCartContent()}
+                    </div>
                   </div>
                 </motion.div>
               </>
