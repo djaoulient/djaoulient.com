@@ -229,7 +229,7 @@ export default function AdminClient() {
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<string>("paid");
-  const [admissionFilter, setAdmissionFilter] = useState<string>("all"); // 'all', 'scanned' (fully admitted), 'unscanned' (no scans yet)
+  const [admissionFilter, setAdmissionFilter] = useState<string>("all"); // 'all', 'scanned' (fully or partially admitted), 'unscanned' (no scans yet)
   /** 'all' or offeringLineKey — options rebuilt from loaded purchases */
   const [offeringFilter, setOfferingFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -885,7 +885,7 @@ export default function AdminClient() {
 
     // Admission filter (aligned with scanned_count / multi-ticket rows)
     const admissionScan = getAdmissionScanState(purchase);
-    if (admissionFilter === "scanned" && admissionScan !== "full") return false;
+    if (admissionFilter === "scanned" && admissionScan === "none") return false;
     if (admissionFilter === "unscanned" && admissionScan !== "none")
       return false;
 
