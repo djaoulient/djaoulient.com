@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslation } from "@/lib/contexts/TranslationContext";
 import { t } from "@/lib/i18n/translations";
+import { setStaffPinCookie } from "./actions";
 
 interface TicketData {
   purchase_id: string;
@@ -251,9 +252,10 @@ const storage = {
 
 interface VerifyClientProps {
   ticketId?: string;
+  initialIsVerified?: boolean;
 }
 
-export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
+export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false }: VerifyClientProps) {
   const searchParams = useSearchParams();
   const ticketId =
     searchParams.get("id")?.trim() || ticketIdProp?.trim() || undefined;
@@ -264,7 +266,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [isVerified, setIsVerified] = useState(false);
+  const [isVerified, setIsVerified] = useState(initialIsVerified);
   const [wasJustAdmitted, setWasJustAdmitted] = useState(false);
   const [flashColor, setFlashColor] = useState<"green" | "red" | null>(null);
 
@@ -526,7 +528,14 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
       }
 
       if (isValidPin) {
-        // Cache the PIN for future use with enhanced storage
+        // Call server action to securely cache PIN session via HttpOnly cookie
+        try {
+          await setStaffPinCookie();
+        } catch {
+          console.warn("Failed to set server PIN cookie, continuing with client cache...");
+        }
+
+        // Cache the PIN for client-side fallback
         try {
           const cacheData = {
             timestamp: Date.now(),
@@ -534,7 +543,7 @@ export function VerifyClient({ ticketId: ticketIdProp }: VerifyClientProps) {
           storage.set(PIN_CACHE_KEY, cacheData);
         } catch {
           // If storage fails, continue anyway
-          console.warn("Failed to cache PIN, but continuing...");
+          console.warn("Failed to cache PIN on client, but continuing...");
         }
 
         setIsVerified(true);

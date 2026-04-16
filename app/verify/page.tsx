@@ -1,5 +1,9 @@
 import { Suspense } from "react";
 import { VerifyClient } from "./verify-client";
+import { cookies } from "next/headers";
+
+const PIN_CACHE_KEY = "staff_verification_pin";
+const PIN_CACHE_DURATION = 8 * 60 * 60 * 1000;
 
 interface SearchParamsProps {
   searchParams: Promise<{
@@ -12,6 +16,21 @@ export default async function VerifyTicketPage({
 }: SearchParamsProps) {
   const params = await searchParams;
 
+  const cookieStore = await cookies();
+  const pinCookie = cookieStore.get(PIN_CACHE_KEY);
+  let initialIsVerified = false;
+
+  if (pinCookie?.value) {
+    try {
+      const data = JSON.parse(pinCookie.value);
+      if (Date.now() - data.timestamp < PIN_CACHE_DURATION) {
+        initialIsVerified = true;
+      }
+    } catch {
+      // ignore parse error and keep as false
+    }
+  }
+
   return (
     <Suspense
       fallback={
@@ -20,7 +39,11 @@ export default async function VerifyTicketPage({
         </div>
       }
     >
-      <VerifyClient key={params.id ?? "no-id"} ticketId={params.id} />
+      <VerifyClient 
+        key={params.id ?? "no-id"} 
+        ticketId={params.id} 
+        initialIsVerified={initialIsVerified} 
+      />
     </Suspense>
   );
 }
