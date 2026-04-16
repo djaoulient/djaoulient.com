@@ -672,10 +672,7 @@ export default function PurchaseFormModal({
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {t(
-                          currentLanguage,
-                          "purchaseModal.buttons.processing",
-                        )}
+                        {t(currentLanguage, "purchaseModal.buttons.processing")}
                       </>
                     ) : (
                       <>

@@ -39,10 +39,10 @@ export default async function VerifyTicketPage({
         </div>
       }
     >
-      <VerifyClient 
-        key={params.id ?? "no-id"} 
-        ticketId={params.id} 
-        initialIsVerified={initialIsVerified} 
+      <VerifyClient
+        key={params.id ?? "no-id"}
+        ticketId={params.id}
+        initialIsVerified={initialIsVerified}
       />
     </Suspense>
   );

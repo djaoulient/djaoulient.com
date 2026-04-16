@@ -52,7 +52,6 @@ import {
   UserPlus,
   MailWarning,
 } from "lucide-react";
-import { toast } from "sonner";
 import LoadingSpinner from "@/components/ui/Bouncer";
 
 interface Purchase {
@@ -321,13 +320,11 @@ export default function AdminClient() {
       const { data, error } = await supabase.rpc("export_admin_purchases_csv");
 
       if (error) {
-        toast.error("Failed to export data");
         console.error("Export error:", error);
         return;
       }
 
       if (!data || data.length === 0) {
-        toast.error("No data to export");
         return;
       }
 
@@ -354,10 +351,7 @@ export default function AdminClient() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-
-      toast.success("Data exported successfully!");
     } catch (error) {
-      toast.error("Failed to export data");
       console.error("Download error:", error);
     } finally {
       setLoading(false);
@@ -463,7 +457,6 @@ export default function AdminClient() {
           },
         );
         if (error) {
-          toast.error("Failed to load purchases");
           console.error("Error loading purchases:", error);
         } else {
           setPurchases(data || []);
@@ -472,14 +465,12 @@ export default function AdminClient() {
         // Load all purchases
         const { data, error } = await supabase.rpc("get_admin_purchases");
         if (error) {
-          toast.error("Failed to load purchases");
           console.error("Error loading purchases:", error);
         } else {
           setPurchases(data || []);
         }
       }
     } catch (error) {
-      toast.error("Failed to load purchases");
       console.error("Error loading purchases:", error);
     } finally {
       setLoading(false);
@@ -512,13 +503,11 @@ export default function AdminClient() {
 
   const handleInviteGuest = async () => {
     if (!selectedEvent || !inviteGuestEmail.trim() || !inviteGuestName.trim()) {
-      toast.error("Please select an event and fill in guest details");
       return;
     }
 
     const selectedEventData = events.find((e) => e.event_id === selectedEvent);
     if (!selectedEventData) {
-      toast.error("Please select an event first");
       return;
     }
 
@@ -540,18 +529,15 @@ export default function AdminClient() {
       });
 
       if (error) {
-        toast.error("Failed to create guest ticket");
         console.error("Error creating guest ticket:", error);
         return;
       }
 
       if (!data || data.length === 0) {
-        toast.error("Failed to create guest ticket");
         return;
       }
 
       const result = data[0];
-      toast.success(`Guest ticket created for ${inviteGuestName}!`);
 
       // Optionally trigger email send
       const { error: emailError } = await supabase.functions.invoke(
@@ -562,11 +548,7 @@ export default function AdminClient() {
       );
 
       if (emailError) {
-        toast.warning(
-          "Ticket created but email failed to send. You can resend from the list.",
-        );
-      } else {
-        toast.success("Ticket email sent!");
+        console.error("Ticket created but email failed to send:", emailError);
       }
 
       // Reset form and close dialog
@@ -577,7 +559,6 @@ export default function AdminClient() {
       setInviteTicketCount(1);
       loadPurchases(); // Refresh the list
     } catch (error) {
-      toast.error("Failed to invite guest");
       console.error("Error inviting guest:", error);
     } finally {
       setInviteLoading(false);
@@ -596,13 +577,11 @@ export default function AdminClient() {
         p_search_query: searchQuery.trim(),
       });
       if (error) {
-        toast.error("Failed to search purchases");
         console.error("Error searching purchases:", error);
       } else {
         setPurchases(data || []);
       }
     } catch (error) {
-      toast.error("Failed to search purchases");
       console.error("Error searching purchases:", error);
     } finally {
       setLoading(false);
@@ -644,7 +623,7 @@ export default function AdminClient() {
           ) {
             errorMessage = updateError.message; // Use the full message from the function
           }
-          toast.error(errorMessage);
+          console.error(errorMessage);
           return;
         }
       }
@@ -658,7 +637,6 @@ export default function AdminClient() {
       );
 
       if (resetError) {
-        toast.error("Failed to reset email status");
         console.error("Error resetting email status:", resetError);
         return;
       }
@@ -673,22 +651,20 @@ export default function AdminClient() {
       );
 
       if (emailError) {
-        toast.error(
+        console.error(
           isRecoverySend
             ? "Failed to send recovery email"
             : "Failed to send email",
         );
-        console.error("Error sending email:", emailError);
-        return;
       }
 
       const isFirstTime =
         selectedPurchase.email_dispatch_status === "NOT_INITIATED" ||
         selectedPurchase.email_dispatch_attempts === 0;
       if (isRecoverySend) {
-        toast.success("Recovery email sent successfully!");
+        console.log("Recovery email sent successfully!");
       } else {
-        toast.success(
+        console.log(
           isFirstTime
             ? "Email sent successfully!"
             : "Email resent successfully!",
@@ -701,7 +677,6 @@ export default function AdminClient() {
       setNewPhone("");
       loadPurchases(); // Refresh the list
     } catch (error) {
-      toast.error("Failed to send email");
       console.error("Error sending email:", error);
     } finally {
       setEmailActionLoading(false);

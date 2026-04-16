@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2,
   CheckCircle,
@@ -84,7 +84,6 @@ function normalizeTicketIdentifier(raw: string): string {
   }
   return s;
 }
-
 
 // Enhanced storage with fallbacks for mobile compatibility
 interface StaffCache {
@@ -197,7 +196,10 @@ interface VerifyClientProps {
   initialIsVerified?: boolean;
 }
 
-export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false }: VerifyClientProps) {
+export function VerifyClient({
+  ticketId: ticketIdProp,
+  initialIsVerified = false,
+}: VerifyClientProps) {
   const searchParams = useSearchParams();
   const ticketId =
     searchParams.get("id")?.trim() || ticketIdProp?.trim() || undefined;
@@ -216,7 +218,7 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
   const verifiedTicketRef = useRef<string | null>(null);
   const isVerifiedRef = useRef(false);
   const verifyTicketFnRef = useRef<(id: string) => Promise<void>>(
-    async () => { },
+    async () => {},
   );
   /** Bumps when `ticketId` changes so slow responses cannot overwrite UI (mobile / rapid scans). */
   const verifyGenerationRef = useRef(0);
@@ -473,7 +475,9 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
         try {
           await setStaffPinCookie();
         } catch {
-          console.warn("Failed to set server PIN cookie, continuing with client cache...");
+          console.warn(
+            "Failed to set server PIN cookie, continuing with client cache...",
+          );
         }
 
         // Cache the PIN for client-side fallback
@@ -630,41 +634,72 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
 
                 <div className="w-full space-y-6">
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    {t(currentLanguage, "ticketVerification.noTicketId.description")}
+                    {t(
+                      currentLanguage,
+                      "ticketVerification.noTicketId.description",
+                    )}
                   </p>
 
                   <div className="bg-muted/50 rounded-lg p-4 text-left border border-border/50">
                     <div className="flex items-center gap-2 mb-3">
                       <Ticket className="w-4 h-4 text-foreground" />
                       <h3 className="font-medium text-foreground text-sm">
-                        {t(currentLanguage, "ticketVerification.noTicketId.howToVerify.title")}
+                        {t(
+                          currentLanguage,
+                          "ticketVerification.noTicketId.howToVerify.title",
+                        )}
                       </h3>
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-2">
                       <li className="flex items-start">
                         <span className="mr-2 mt-0.5">•</span>
-                        <span>{t(currentLanguage, "ticketVerification.noTicketId.howToVerify.scanQr")}</span>
+                        <span>
+                          {t(
+                            currentLanguage,
+                            "ticketVerification.noTicketId.howToVerify.scanQr",
+                          )}
+                        </span>
                       </li>
                       <li className="flex items-start">
                         <span className="mr-2 mt-0.5">•</span>
-                        <span>{t(currentLanguage, "ticketVerification.noTicketId.howToVerify.enterPin")}</span>
+                        <span>
+                          {t(
+                            currentLanguage,
+                            "ticketVerification.noTicketId.howToVerify.enterPin",
+                          )}
+                        </span>
                       </li>
                       <li className="flex items-start">
                         <span className="mr-2 mt-0.5">•</span>
-                        <span>{t(currentLanguage, "ticketVerification.noTicketId.howToVerify.reviewDetails")}</span>
+                        <span>
+                          {t(
+                            currentLanguage,
+                            "ticketVerification.noTicketId.howToVerify.reviewDetails",
+                          )}
+                        </span>
                       </li>
                     </ul>
                   </div>
 
-                  <Button asChild className="w-full rounded-lg" variant="outline">
+                  <Button
+                    asChild
+                    className="w-full rounded-lg"
+                    variant="outline"
+                  >
                     <Link href="/">
                       <Calendar className="w-4 h-4 mr-2" />
-                      {t(currentLanguage, "ticketVerification.noTicketId.backToEvents")}
+                      {t(
+                        currentLanguage,
+                        "ticketVerification.noTicketId.backToEvents",
+                      )}
                     </Link>
                   </Button>
 
                   <p className="text-xs text-muted-foreground">
-                    {t(currentLanguage, "ticketVerification.noTicketId.needHelp")}
+                    {t(
+                      currentLanguage,
+                      "ticketVerification.noTicketId.needHelp",
+                    )}
                   </p>
                 </div>
               </div>
@@ -690,13 +725,19 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
 
                 <div className="w-full space-y-8">
                   <p className="text-sm text-muted-foreground">
-                    {t(currentLanguage, "ticketVerification.pinEntry.description")}
+                    {t(
+                      currentLanguage,
+                      "ticketVerification.pinEntry.description",
+                    )}
                   </p>
 
                   <form onSubmit={handlePinSubmit} className="space-y-4">
                     <Input
                       type="password"
-                      placeholder={t(currentLanguage, "ticketVerification.pinEntry.pinPlaceholder")}
+                      placeholder={t(
+                        currentLanguage,
+                        "ticketVerification.pinEntry.pinPlaceholder",
+                      )}
                       value={pin}
                       onChange={(e) => setPin(e.target.value)}
                       maxLength={4}
@@ -712,20 +753,31 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {t(currentLanguage, "ticketVerification.pinEntry.verifying")}
+                          {t(
+                            currentLanguage,
+                            "ticketVerification.pinEntry.verifying",
+                          )}
                         </>
                       ) : (
-                        t(currentLanguage, "ticketVerification.pinEntry.verifyButton")
+                        t(
+                          currentLanguage,
+                          "ticketVerification.pinEntry.verifyButton",
+                        )
                       )}
                     </Button>
                   </form>
 
                   {error && (
-                    <p className="text-sm text-destructive font-medium">{error}</p>
+                    <p className="text-sm text-destructive font-medium">
+                      {error}
+                    </p>
                   )}
 
                   <p className="text-xs text-muted-foreground">
-                    {t(currentLanguage, "ticketVerification.pinEntry.staffOnly")}
+                    {t(
+                      currentLanguage,
+                      "ticketVerification.pinEntry.staffOnly",
+                    )}
                   </p>
                 </div>
               </div>
@@ -744,8 +796,9 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
       {/* Flash Feedback Overlay */}
       {flashColor && (
         <div
-          className={`fixed inset-0 pointer-events-none z-50 ${flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
-            }`}
+          className={`fixed inset-0 pointer-events-none z-50 ${
+            flashColor === "green" ? "bg-green-500/30" : "bg-red-500/30"
+          }`}
           style={{ animation: "flash 0.4s ease-out" }}
         />
       )}
@@ -802,7 +855,7 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
                                 ticketData.remaining_tickets != null
                                   ? ticketData.remaining_tickets
                                   : (ticketData.total_quantity || 1) -
-                                  (ticketData.use_count || 0),
+                                    (ticketData.use_count || 0),
                             },
                           )}
                         </p>
@@ -811,10 +864,11 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
                   )}
                   {error && (
                     <p
-                      className={`text-sm ${errorCode === "ALREADY_USED"
-                        ? "text-muted-foreground"
-                        : "text-destructive"
-                        }`}
+                      className={`text-sm ${
+                        errorCode === "ALREADY_USED"
+                          ? "text-muted-foreground"
+                          : "text-destructive"
+                      }`}
                     >
                       {error}
                     </p>
