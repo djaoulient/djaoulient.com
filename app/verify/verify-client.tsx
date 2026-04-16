@@ -391,8 +391,10 @@ export function VerifyClient({ ticketId: ticketIdProp, initialIsVerified = false
           const friendlyMessage = getUserFriendlyError(code, msg);
           setError(friendlyMessage);
           setErrorCode(code);
-          setFlashColor("red");
-          setTimeout(() => setFlashColor(null), 500);
+          if (code !== "ALREADY_USED") {
+            setFlashColor("red");
+            setTimeout(() => setFlashColor(null), 500);
+          }
           return;
         }
 
