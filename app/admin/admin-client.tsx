@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import supabase from "@/lib/supabase/client";
+import {
+  buildPaidGuestPdfRows,
+  downloadPaidGuestsPdf as downloadPaidGuestsPdfFile,
+} from "@/lib/admin/export-paid-guests-pdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -313,50 +317,22 @@ export default function AdminClient() {
     return date.toLocaleDateString();
   };
 
-  // Download CSV function
-  const downloadCSV = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase.rpc("export_admin_purchases_csv");
+  const paidGuestRowsForPdf = useMemo(
+    () => buildPaidGuestPdfRows(purchases, selectedEvent),
+    [purchases, selectedEvent],
+  );
 
-      if (error) {
-        console.error("Export error:", error);
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        return;
-      }
-
-      // Convert to CSV
-      const headers = Object.keys(data[0]);
-      const csvContent = [
-        headers.join(","),
-        ...data.map((row: Record<string, unknown>) =>
-          headers
-            .map(
-              (header) => `"${String(row[header] || "").replace(/"/g, '""')}"`,
-            )
-            .join(","),
-        ),
-      ].join("\n");
-
-      // Download file
-      const blob = new Blob([csvContent], { type: "text/csv" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `purchases-export-${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Download error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const downloadPaidGuestsPdf = useCallback(() => {
+    if (!selectedEvent || paidGuestRowsForPdf.length === 0) return;
+    const eventTitle =
+      events.find((e) => e.event_id === selectedEvent)?.event_title ?? "Event";
+    downloadPaidGuestsPdfFile({
+      purchases,
+      selectedEvent,
+      eventTitle,
+      bodyRows: paidGuestRowsForPdf,
+    });
+  }, [selectedEvent, paidGuestRowsForPdf, purchases, events]);
 
   // Check authentication on mount
   useEffect(() => {
@@ -1282,15 +1258,24 @@ export default function AdminClient() {
                           <span className="ml-2 sm:hidden">Refresh</span>
                         </Button>
                         <Button
-                          onClick={downloadCSV}
+                          onClick={downloadPaidGuestsPdf}
                           variant="outline"
                           size="sm"
                           className="h-8 w-8 touch-manipulation rounded-sm border-slate-700 p-0 text-gray-100 hover:bg-card/70 sm:h-10 sm:w-10"
-                          disabled={loading}
-                          aria-label="Export purchases"
+                          disabled={
+                            loading ||
+                            !selectedEvent ||
+                            paidGuestRowsForPdf.length === 0
+                          }
+                          title={
+                            !selectedEvent
+                              ? "Select an event to export a PDF guest list"
+                              : "Download paid guest list as PDF (includes Purchases & Total tickets)"
+                          }
+                          aria-label="Export paid guests as PDF"
                         >
                           <Download className="h-4 w-4" />
-                          <span className="ml-2 sm:hidden">Export</span>
+                          <span className="ml-2 sm:hidden">PDF</span>
                         </Button>
                       </div>
                     </div>
