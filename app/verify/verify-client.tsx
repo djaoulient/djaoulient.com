@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/actions/utils";
 import {
   Loader2,
   CheckCircle,
@@ -48,6 +55,7 @@ interface TicketData {
 
 const PIN_CACHE_KEY = "staff_verification_pin";
 const PIN_CACHE_DURATION = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+const STAFF_PIN_LENGTH = 4;
 
 /** QR sometimes contains a full verify URL, wrapped quotes, or only the id query segment. */
 function normalizeTicketIdentifier(raw: string): string {
@@ -100,15 +108,10 @@ const storage = {
   set: (key: string, value: unknown): boolean => {
     const data = JSON.stringify(value);
     try {
-      // Try localStorage first (persists across browser sessions)
+      // localStorage only for JS-readable cache — never mirror with document.cookie
+      // using the same name as the HttpOnly `staff_verification_pin` cookie; Safari
+      // often drops or corrupts the session when both exist.
       localStorage.setItem(key, data);
-
-      // Also set document cookie for cross-app/tab persistence
-      if (typeof document !== "undefined") {
-        const expires = new Date();
-        expires.setTime(expires.getTime() + 8 * 60 * 60 * 1000); // 8 hours
-        document.cookie = `${key}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;max-age=${8 * 60 * 60};SameSite=Lax`;
-      }
       return true;
     } catch {
       try {
@@ -124,22 +127,8 @@ const storage = {
     }
   },
   get: (key: string): unknown => {
-    // Try cookie first as it's more reliable across sub-environments (like native camera to Safari transitions)
     try {
-      if (typeof document !== "undefined") {
-        const match = document.cookie.match(
-          new RegExp("(^| )" + key + "=([^;]+)"),
-        );
-        if (match && match[2]) {
-          return JSON.parse(decodeURIComponent(match[2]));
-        }
-      }
-    } catch {
-      // Ignore parse errors from cookies
-    }
-
-    try {
-      // Try localStorage
+      // Try localStorage (HttpOnly session is read on the server only, not via document.cookie)
       const data = localStorage.getItem(key);
       if (data) return JSON.parse(data);
     } catch {
@@ -164,13 +153,6 @@ const storage = {
     return null;
   },
   remove: (key: string): void => {
-    try {
-      if (typeof document !== "undefined") {
-        document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-      }
-    } catch {
-      // Ignore errors
-    }
     try {
       localStorage.removeItem(key);
     } catch {
@@ -205,7 +187,13 @@ export function VerifyClient({
     searchParams.get("id")?.trim() || ticketIdProp?.trim() || undefined;
 
   const { currentLanguage } = useTranslation();
-  const [pin, setPin] = useState("");
+  const [pinDigits, setPinDigits] = useState<string[]>(() =>
+    Array(STAFF_PIN_LENGTH).fill(""),
+  );
+  const pinInputRefs = useRef<Array<HTMLInputElement | null>>(
+    Array(STAFF_PIN_LENGTH).fill(null),
+  );
+  const pin = pinDigits.join("");
   const [isLoading, setIsLoading] = useState(false);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -223,8 +211,96 @@ export function VerifyClient({
   /** Bumps when `ticketId` changes so slow responses cannot overwrite UI (mobile / rapid scans). */
   const verifyGenerationRef = useRef(0);
 
+  const clearPinBoxes = useCallback(() => {
+    setPinDigits(Array(STAFF_PIN_LENGTH).fill(""));
+    requestAnimationFrame(() => {
+      pinInputRefs.current[0]?.focus();
+    });
+  }, []);
+
+  const handleDigitInput = useCallback((index: number, raw: string) => {
+    setError(null);
+    const cleaned = raw.replace(/\D/g, "");
+    if (cleaned.length > 1) {
+      const chars = cleaned.slice(0, STAFF_PIN_LENGTH).split("");
+      setPinDigits(() => {
+        const next: string[] = Array(STAFF_PIN_LENGTH).fill("");
+        for (let i = 0; i < STAFF_PIN_LENGTH; i++) {
+          next[i] = chars[i] ?? "";
+        }
+        return next;
+      });
+      const focusAt = Math.min(chars.length, STAFF_PIN_LENGTH) - 1;
+      requestAnimationFrame(() =>
+        pinInputRefs.current[Math.max(0, focusAt)]?.focus(),
+      );
+      return;
+    }
+    const ch = cleaned.slice(-1);
+    setPinDigits((prev) => {
+      const next = [...prev];
+      next[index] = ch;
+      return next;
+    });
+    if (ch && index < STAFF_PIN_LENGTH - 1) {
+      requestAnimationFrame(() => pinInputRefs.current[index + 1]?.focus());
+    }
+  }, []);
+
+  const handleDigitKeyDown = useCallback(
+    (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Backspace" && !e.currentTarget.value && index > 0) {
+        e.preventDefault();
+        pinInputRefs.current[index - 1]?.focus();
+      } else if (e.key === "ArrowLeft" && index > 0) {
+        e.preventDefault();
+        pinInputRefs.current[index - 1]?.focus();
+      } else if (e.key === "ArrowRight" && index < STAFF_PIN_LENGTH - 1) {
+        e.preventDefault();
+        pinInputRefs.current[index + 1]?.focus();
+      }
+    },
+    [],
+  );
+
+  const handlePinPaste = useCallback((e: ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, STAFF_PIN_LENGTH);
+    if (!text) return;
+    setError(null);
+    const chars = text.split("");
+    setPinDigits(() => {
+      const next: string[] = Array(STAFF_PIN_LENGTH).fill("");
+      for (let i = 0; i < STAFF_PIN_LENGTH; i++) {
+        next[i] = chars[i] ?? "";
+      }
+      return next;
+    });
+    const focusAt = Math.min(chars.length, STAFF_PIN_LENGTH) - 1;
+    requestAnimationFrame(() =>
+      pinInputRefs.current[Math.max(0, focusAt)]?.focus(),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (isVerified) return;
+    const id = requestAnimationFrame(() => pinInputRefs.current[0]?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [isVerified]);
+
   // Check for cached PIN on component mount
   useEffect(() => {
+    // Remove legacy non-HttpOnly cookie that used the same name as the server session (Safari
+    // could keep a broken shadow entry). Script cannot clear HttpOnly; only duplicates.
+    try {
+      document.cookie = `${PIN_CACHE_KEY}=; Max-Age=0; path=/; SameSite=Lax`;
+    } catch {
+      // ignore
+    }
+
     const checkCachedPin = () => {
       try {
         const cached = storage.get(PIN_CACHE_KEY);
@@ -493,14 +569,14 @@ export function VerifyClient({
 
         setIsVerified(true);
         setError(null);
-        setPin("");
+        setPinDigits(Array(STAFF_PIN_LENGTH).fill(""));
       } else {
         setError(t(currentLanguage, "ticketVerification.errors.invalidPin"));
-        setPin("");
+        clearPinBoxes();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "PIN verification failed");
-      setPin("");
+      clearPinBoxes();
     } finally {
       setIsLoading(false);
     }
@@ -714,45 +790,75 @@ export function VerifyClient({
   if (!isVerified) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm space-y-8">
+        <div className="w-full max-w-sm">
           <Card className="rounded-lg border shadow-sm">
-            <CardContent className="px-8 py-12">
-              <div className="flex flex-col items-center text-center space-y-8">
-                <Shield className="h-8 w-8 text-muted-foreground" />
-                <h2 className="text-lg font-medium tracking-tight text-foreground">
+            <CardContent className="px-6 py-10">
+              <div className="flex flex-col items-center text-center space-y-6">
+                <Shield className="h-7 w-7 text-muted-foreground" />
+                <h2 className="text-base font-medium tracking-tight text-foreground">
                   {t(currentLanguage, "ticketVerification.staffVerification")}
                 </h2>
 
-                <div className="w-full space-y-8">
-                  <p className="text-sm text-muted-foreground">
+                <div className="w-full space-y-5">
+                  <p className="text-sm text-muted-foreground leading-snug">
                     {t(
                       currentLanguage,
                       "ticketVerification.pinEntry.description",
                     )}
                   </p>
 
-                  <form onSubmit={handlePinSubmit} className="space-y-4">
-                    <Input
-                      type="password"
-                      placeholder={t(
+                  <form
+                    onSubmit={handlePinSubmit}
+                    className="flex flex-col items-center gap-5"
+                  >
+                    <div
+                      className="flex justify-center gap-2"
+                      onPaste={handlePinPaste}
+                      role="group"
+                      aria-label={t(
                         currentLanguage,
                         "ticketVerification.pinEntry.pinPlaceholder",
                       )}
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      maxLength={4}
-                      className="text-center text-2xl tracking-widest h-12 rounded-lg bg-background border-border"
-                      disabled={isLoading}
-                    />
+                    >
+                      {Array.from({ length: STAFF_PIN_LENGTH }, (_, i) => (
+                        <input
+                          key={i}
+                          ref={(el) => {
+                            pinInputRefs.current[i] = el;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          autoComplete={i === 0 ? "one-time-code" : "off"}
+                          name={`staff-pin-${i}`}
+                          maxLength={1}
+                          value={pinDigits[i]}
+                          disabled={isLoading}
+                          aria-invalid={error ? true : undefined}
+                          className={cn(
+                            "h-11 w-10 shrink-0 rounded-md border border-input bg-background text-center text-lg font-semibold tabular-nums shadow-xs outline-none transition-[color,box-shadow]",
+                            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                            "disabled:pointer-events-none disabled:opacity-50",
+                            "dark:bg-input/30",
+                          )}
+                          onChange={(e) => handleDigitInput(i, e.target.value)}
+                          onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                        />
+                      ))}
+                    </div>
+
                     <Button
                       type="submit"
-                      className="w-full rounded-lg"
-                      disabled={pin.length !== 4 || isLoading}
-                      size="lg"
+                      size="sm"
+                      className="rounded-md px-6"
+                      disabled={pin.length !== STAFF_PIN_LENGTH || isLoading}
                     >
                       {isLoading ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                           {t(
                             currentLanguage,
                             "ticketVerification.pinEntry.verifying",
