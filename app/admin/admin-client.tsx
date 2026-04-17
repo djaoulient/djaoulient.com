@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import supabase from "@/lib/supabase/client";
 import {
@@ -187,6 +187,13 @@ function offeringLineLabel(p: Purchase): string {
   return p.is_bundle ? `${name} (pack)` : name;
 }
 
+/** Set localStorage admin_debug_purchases=1 to enable verbose purchase-fetch logs. */
+function logAdminPurchases(...args: unknown[]) {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem("admin_debug_purchases") !== "1") return;
+  console.info("[admin-purchases]", ...args);
+}
+
 interface EventInfo {
   event_id: string;
   event_title: string;
@@ -248,6 +255,9 @@ export default function AdminClient() {
   // Scanner Tab State
   const [activeTab, setActiveTab] = useState("purchases");
   const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
+
+  /** Detect overlapping loadPurchases() calls (e.g. mount + selectedEvent auto-select). */
+  const loadPurchasesGeneration = useRef(0);
 
   /** Legacy: match abandoned resolution by paid rows (customer_id or typo-normalized email). */
   const paidLegacyKeys = useMemo(() => {
@@ -348,6 +358,10 @@ export default function AdminClient() {
   // Auto-select the most recent event when events are loaded
   useEffect(() => {
     if (events.length > 0 && !selectedEvent) {
+      logAdminPurchases("auto-select event", {
+        event_id: events[0].event_id,
+        event_title: events[0].event_title,
+      });
       setSelectedEvent(events[0].event_id);
     }
   }, [events, selectedEvent]);
@@ -355,6 +369,10 @@ export default function AdminClient() {
   // Reload data when selected event or status filter changes
   useEffect(() => {
     if (isAuthenticated) {
+      logAdminPurchases("effect: reload purchases/events/logs", {
+        selectedEvent,
+        statusFilter,
+      });
       loadEvents();
       loadPurchases();
       loadScanLogs();
@@ -422,16 +440,37 @@ export default function AdminClient() {
   };
 
   const loadPurchases = async () => {
+    const gen = ++loadPurchasesGeneration.current;
+    const eventAtRequestStart = selectedEvent;
+    const rpcName = eventAtRequestStart
+      ? "get_admin_purchases_by_event"
+      : "get_admin_purchases";
+    logAdminPurchases("loadPurchases start", {
+      gen,
+      eventAtRequestStart,
+      rpcName,
+      statusFilter,
+    });
     setLoading(true);
     try {
-      if (selectedEvent) {
+      if (eventAtRequestStart) {
         // Load purchases for specific event
         const { data, error } = await supabase.rpc(
           "get_admin_purchases_by_event",
           {
-            p_event_id: selectedEvent,
+            p_event_id: eventAtRequestStart,
           },
         );
+        const rowCount = data?.length ?? 0;
+        const stale = gen !== loadPurchasesGeneration.current;
+        logAdminPurchases("loadPurchases end (by event)", {
+          gen,
+          eventAtRequestStart,
+          rowCount,
+          error: error?.message ?? null,
+          stale,
+          latestGen: loadPurchasesGeneration.current,
+        });
         if (error) {
           console.error("Error loading purchases:", error);
         } else {
@@ -440,6 +479,15 @@ export default function AdminClient() {
       } else {
         // Load all purchases
         const { data, error } = await supabase.rpc("get_admin_purchases");
+        const rowCount = data?.length ?? 0;
+        const stale = gen !== loadPurchasesGeneration.current;
+        logAdminPurchases("loadPurchases end (global cap)", {
+          gen,
+          rowCount,
+          error: error?.message ?? null,
+          stale,
+          latestGen: loadPurchasesGeneration.current,
+        });
         if (error) {
           console.error("Error loading purchases:", error);
         } else {
@@ -447,6 +495,11 @@ export default function AdminClient() {
         }
       }
     } catch (error) {
+      logAdminPurchases("loadPurchases threw", {
+        gen,
+        error: String(error),
+        latestGen: loadPurchasesGeneration.current,
+      });
       console.error("Error loading purchases:", error);
     } finally {
       setLoading(false);
@@ -883,6 +936,39 @@ export default function AdminClient() {
         };
       })()
     : null;
+
+  useEffect(() => {
+    const byStatus = (s: string) =>
+      purchases.filter((p) => {
+        if (s === "paid") return p.status === "paid";
+        if (s === "all") return true;
+        if (s === "pending") return p.status === "pending_payment";
+        if (s === "failed") return p.status === "payment_failed";
+        return true;
+      }).length;
+    logAdminPurchases("ui row counts", {
+      raw_purchases: purchases.length,
+      after_status_filter: statusFilteredPurchases.length,
+      table_rows_filteredPurchases: filteredPurchases.length,
+      statusFilter,
+      paid_rows_in_buffer: byStatus("paid"),
+      card_total_purchases_paid_only: currentEventStats?.total_purchases ?? null,
+      selectedEvent,
+      admissionFilter,
+      offeringFilter,
+      search_nonempty: Boolean(searchQuery.trim()),
+    });
+  }, [
+    purchases,
+    statusFilteredPurchases.length,
+    filteredPurchases.length,
+    statusFilter,
+    selectedEvent,
+    admissionFilter,
+    offeringFilter,
+    searchQuery,
+    currentEventStats?.total_purchases,
+  ]);
 
   if (!isAuthenticated) {
     return (
