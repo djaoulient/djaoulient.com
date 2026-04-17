@@ -187,8 +187,11 @@ function offeringLineLabel(p: Purchase): string {
   return p.is_bundle ? `${name} (pack)` : name;
 }
 
-/** Set localStorage admin_debug_purchases=1 to enable verbose purchase-fetch logs. */
-function logAdminPurchases(...args: unknown[]) {
+/**
+ * Extra logs (auto-select, filter snapshot). Fetch logs are always printed via
+ * console.info("[admin-purchases] …") so you see them without localStorage.
+ */
+function logAdminPurchasesVerbose(...args: unknown[]) {
   if (typeof window === "undefined") return;
   if (window.localStorage.getItem("admin_debug_purchases") !== "1") return;
   console.info("[admin-purchases]", ...args);
@@ -350,7 +353,8 @@ export default function AdminClient() {
     if (authStatus === "true") {
       setIsAuthenticated(true);
       loadEvents();
-      loadPurchases();
+      // loadPurchases: deferred to the [selectedEvent, isAuthenticated] effect so we
+      // do not race get_admin_purchases (100 cap) against get_admin_purchases_by_event.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -358,7 +362,7 @@ export default function AdminClient() {
   // Auto-select the most recent event when events are loaded
   useEffect(() => {
     if (events.length > 0 && !selectedEvent) {
-      logAdminPurchases("auto-select event", {
+      logAdminPurchasesVerbose("auto-select event", {
         event_id: events[0].event_id,
         event_title: events[0].event_title,
       });
@@ -366,19 +370,18 @@ export default function AdminClient() {
     }
   }, [events, selectedEvent]);
 
-  // Reload data when selected event or status filter changes
+  // Reload when event scope or auth changes — not statusFilter (that is client-only).
   useEffect(() => {
     if (isAuthenticated) {
-      logAdminPurchases("effect: reload purchases/events/logs", {
+      console.info("[admin-purchases] effect reload", {
         selectedEvent,
-        statusFilter,
       });
       loadEvents();
       loadPurchases();
       loadScanLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEvent, statusFilter, isAuthenticated]);
+  }, [selectedEvent, isAuthenticated]);
 
   const loadScanLogs = useCallback(async () => {
     try {
@@ -422,8 +425,8 @@ export default function AdminClient() {
         setIsAuthenticated(true);
         localStorage.setItem("admin_authenticated", "true");
         loadEvents();
-        loadPurchases();
         loadScanLogs();
+        // loadPurchases runs from [selectedEvent, isAuthenticated] effect
       } else {
         setAuthError("Invalid PIN. Please try again.");
       }
@@ -445,11 +448,10 @@ export default function AdminClient() {
     const rpcName = eventAtRequestStart
       ? "get_admin_purchases_by_event"
       : "get_admin_purchases";
-    logAdminPurchases("loadPurchases start", {
+    console.info("[admin-purchases] load start", {
       gen,
       eventAtRequestStart,
       rpcName,
-      statusFilter,
     });
     setLoading(true);
     try {
@@ -463,17 +465,22 @@ export default function AdminClient() {
         );
         const rowCount = data?.length ?? 0;
         const stale = gen !== loadPurchasesGeneration.current;
-        logAdminPurchases("loadPurchases end (by event)", {
-          gen,
-          eventAtRequestStart,
-          rowCount,
-          error: error?.message ?? null,
-          stale,
-          latestGen: loadPurchasesGeneration.current,
-        });
         if (error) {
           console.error("Error loading purchases:", error);
+        } else if (stale) {
+          console.info("[admin-purchases] load end (stale, ignored)", {
+            gen,
+            rpcName,
+            rowCount,
+            latestGen: loadPurchasesGeneration.current,
+          });
         } else {
+          console.info("[admin-purchases] load end", {
+            gen,
+            rpcName,
+            eventAtRequestStart,
+            rowCount,
+          });
           setPurchases(data || []);
         }
       } else {
@@ -481,28 +488,35 @@ export default function AdminClient() {
         const { data, error } = await supabase.rpc("get_admin_purchases");
         const rowCount = data?.length ?? 0;
         const stale = gen !== loadPurchasesGeneration.current;
-        logAdminPurchases("loadPurchases end (global cap)", {
-          gen,
-          rowCount,
-          error: error?.message ?? null,
-          stale,
-          latestGen: loadPurchasesGeneration.current,
-        });
         if (error) {
           console.error("Error loading purchases:", error);
+        } else if (stale) {
+          console.info("[admin-purchases] load end (stale, ignored)", {
+            gen,
+            rpcName,
+            rowCount,
+            latestGen: loadPurchasesGeneration.current,
+          });
         } else {
+          console.info("[admin-purchases] load end", {
+            gen,
+            rpcName,
+            rowCount,
+          });
           setPurchases(data || []);
         }
       }
     } catch (error) {
-      logAdminPurchases("loadPurchases threw", {
+      console.info("[admin-purchases] load threw", {
         gen,
         error: String(error),
         latestGen: loadPurchasesGeneration.current,
       });
       console.error("Error loading purchases:", error);
     } finally {
-      setLoading(false);
+      if (gen === loadPurchasesGeneration.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -946,7 +960,7 @@ export default function AdminClient() {
         if (s === "failed") return p.status === "payment_failed";
         return true;
       }).length;
-    logAdminPurchases("ui row counts", {
+    logAdminPurchasesVerbose("ui row counts", {
       raw_purchases: purchases.length,
       after_status_filter: statusFilteredPurchases.length,
       table_rows_filteredPurchases: filteredPurchases.length,
