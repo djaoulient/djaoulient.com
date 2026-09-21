@@ -90,6 +90,21 @@ Deno.serve(async (req: Request) => {
 
     const purchaseData = purchaseDataArray[0];
 
+    if (purchaseData.status !== "paid") {
+      console.warn(
+        `send-ticket-email: Refusing ticket email for purchase ${purchaseIdFromRequest} with status ${purchaseData.status}.`,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "Ticket email is only sent after payment is confirmed.",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
+        },
+      );
+    }
+
     // Check if email already sent or in progress to prevent duplicates if retried
     if (
       purchaseData.email_dispatch_status === "SENT_SUCCESSFULLY" ||

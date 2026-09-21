@@ -648,6 +648,12 @@ export default function AdminClient() {
 
   const handleEmailAction = async () => {
     if (!selectedPurchase) return;
+    if (
+      selectedPurchase.status !== "paid" &&
+      !isRecoveryEmailActionable(selectedPurchase)
+    ) {
+      return;
+    }
 
     setEmailActionLoading(true);
     try {
@@ -824,11 +830,7 @@ export default function AdminClient() {
   };
 
   const canSendEmail = (purchase: Purchase) => {
-    return (
-      purchase.status === "paid" ||
-      purchase.status === "pending_payment" ||
-      isRecoveryEmailActionable(purchase)
-    );
+    return purchase.status === "paid" || isRecoveryEmailActionable(purchase);
   };
 
   /** Recovery emails are one-shot from admin: show Sent badge but no action after success. */
